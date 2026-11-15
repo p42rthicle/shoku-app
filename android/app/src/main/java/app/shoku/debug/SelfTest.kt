@@ -13,6 +13,7 @@ import app.shoku.data.DietNotes
 import app.shoku.data.db.Batch
 import app.shoku.data.db.EntryStatus
 import app.shoku.data.db.Food
+import app.shoku.data.db.FoodKind
 import app.shoku.data.db.LogEntry
 import app.shoku.data.db.Meals
 import app.shoku.data.db.RefType
@@ -91,6 +92,12 @@ class SelfTest(private val app: ShokuApplication) {
         "forget" -> forget(code ?: "")
         "finishbatches" -> finishBatches()
         "snapshot" -> snapshot()
+        "renamefood" -> { // code: old name|new name|brand
+            val (old, new, brand) = (code.orEmpty().split('|') + listOf("", "", "")).take(3)
+            val f = repo.library.first().foods.values.firstOrNull { it.name == old && !it.deleted }
+            if (f != null) repo.saveFood(f.copy(name = new.ifBlank { f.name }, brand = brand.ifBlank { null }, kind = if (brand.isNotBlank()) FoodKind.PRODUCT else f.kind), updatePast = false)
+            log("renamefood: ${f?.name ?: "not found: $old"} -> $new [$brand]")
+        }
         "dietnotes" -> { DietNotes.text = code.orEmpty().split('|').joinToString("\n") { it.trim() }; log("diet notes: ${DietNotes.lines.size} rules") }
         "remove" -> remove(code.orEmpty().split(',').filter { it.contains(':') })
         "clearnotifications" -> { androidx.core.app.NotificationManagerCompat.from(app).cancelAll(); log("notifications cleared") }

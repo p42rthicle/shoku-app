@@ -35,6 +35,8 @@ val CHANGELOG = listOf(
             "Search finds the built-in Indian products too (milk cake: Haldiram's, Amul, Bikano…); online results need every word in the name",
             "New foods start in grams; a database serving like \"1 slice = 287 g\" is there to pick, not the default",
             "A food you archived no longer hides it from the food databases; picking it brings it back",
+            "Anything the AI estimates (plate photo, describe) is saved to your library when logged, so next time it's a normal match; past estimates were converted too",
+            "AI keeps brands apart: \"Yadav chakli\" becomes Chakli with the brand Yadav; tap an item in the AI review to set or fix its brand",
             "Smaller download for shared builds (about 5 MB)",
         ),
     ),

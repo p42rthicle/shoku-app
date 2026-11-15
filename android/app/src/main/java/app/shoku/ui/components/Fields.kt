@@ -125,8 +125,12 @@ fun AmountSheet(
     onRemove: (() -> Unit)? = null,
     /** "Replace with another food" (e.g. a wrong AI match). */
     onReplace: (() -> Unit)? = null,
+    /** Shows a Brand field ("Yadav") when set; gets the brand on Save (null = none). */
+    brand: String? = null,
+    onBrand: ((String?) -> Unit)? = null,
 ) {
     var unit by remember { mutableStateOf(initialUnit) }
+    var brandText by remember { mutableStateOf(brand.orEmpty()) }
     var text by remember { mutableStateOf(initialQty.asField()) }
     val qty = text.toAmount()
     val n = qty?.let { nutrientsFor(unit, it) }
@@ -140,6 +144,10 @@ fun AmountSheet(
             Text(title, style = MaterialTheme.typography.headlineSmall)
             Spacer(Modifier.height(14.dp))
             LabeledField("Amount", text, { text = it }, Modifier.fillMaxWidth(), numeric = true, suffix = if (unit == "serving") "servings" else unit)
+            if (onBrand != null) {
+                Spacer(Modifier.height(12.dp))
+                LabeledField("Brand (optional)", brandText, { brandText = it }, Modifier.fillMaxWidth(), placeholder = "e.g. Haldiram's, Yadav")
+            }
             if (units.size > 1) {
                 Spacer(Modifier.height(12.dp))
                 Segmented(units.map { if (it == "serving") "Servings" else it }, units.indexOf(unit).coerceAtLeast(0)) { unit = units[it] }
@@ -162,7 +170,7 @@ fun AmountSheet(
                     ) { Icon(Icons.Outlined.Delete, "Remove", tint = ShokuColors.Ink) }
                     Spacer(Modifier.width(10.dp))
                 }
-                PrimaryButton("Save", onClick = { if (qty != null && qty > 0) onSave(unit, qty) }, modifier = Modifier.weight(1f))
+                PrimaryButton("Save", onClick = { if (qty != null && qty > 0) { onBrand?.invoke(brandText.trim().ifEmpty { null }); onSave(unit, qty) } }, modifier = Modifier.weight(1f))
             }
         }
     }

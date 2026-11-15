@@ -201,10 +201,10 @@ fun AiReviewSheet(
                         ) { if (included[i]) Icon(Icons.Rounded.Check, "Included", tint = ShokuColors.Paper, modifier = Modifier.size(16.dp)) }
                         Spacer(Modifier.width(14.dp))
                         Column(Modifier.weight(1f)) {
-                            Text(it.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, color = if (included[i]) ShokuColors.Ink else ShokuColors.Muted)
+                            app.shoku.ui.components.NameWithTag(it.name, it.brand, MaterialTheme.typography.titleMedium)
                             val source = when {
                                 it.reference != null -> if (it.reference.source == "indb") "Indian dish database" else "German food database"
-                                it.refType == RefType.QUICK -> "not in your library, estimated"
+                                it.refType == RefType.QUICK -> "estimated · saved to your library when logged"
                                 it.basis == Basis.ESTIMATE -> "from your library, amount estimated"
                                 else -> "from your library"
                             }
@@ -266,6 +266,9 @@ fun AiReviewSheet(
             onSave = { u, q -> items[i] = it.copy(unit = u, qty = q, nutrients = nutrientsFor(u, q)); editing = null },
             onRemove = { included[i] = false; editing = null },
             onReplace = if (library != null) ({ editing = null; replacing = i }) else null,
+            // The brand ("Yadav"): saved on a new food, or as the brand note on a generic match.
+            brand = it.brand,
+            onBrand = { b -> items[i] = items[i].copy(brand = b) },
             onDismiss = { editing = null },
         )
     }

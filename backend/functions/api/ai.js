@@ -68,11 +68,12 @@ const ESTIMATE = {
 const ITEM = {
 	type: 'object',
 	additionalProperties: false,
-	required: ['said', 'match_key', 'name', 'unit', 'qty', 'confidence', 'estimate'],
+	required: ['said', 'match_key', 'name', 'brand', 'unit', 'qty', 'confidence', 'estimate'],
 	properties: {
 		said: { type: 'string', description: 'The words this item came from' },
 		match_key: nullable({ type: 'string', description: 'Key of the library item, e.g. "f12"' }),
 		name: { type: 'string', description: 'Library name when matched, otherwise a short clear English name' },
+		brand: nullable({ type: 'string', description: 'Brand when they name one or it shows on the pack, never part of name' }),
 		unit: { type: 'string', description: 'One of the matched item\'s units, or "g" when not matched' },
 		qty: num,
 		confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
@@ -123,6 +124,7 @@ Matching to their library:
 - The unit must be one of that item's listed units. Prefer a named portion (medium, slice, tin, tbsp, bowl) when they describe one; use g or ml when they give a weight or volume.
 - If nothing in the library fits, set match_key to null, use unit "g", and fill estimate with typical values per 100 g plus the grams eaten. Think of realistic home portions (a katori of dal is about 150 g, a roti about 40 g, a cup of cooked rice about 160 g).
 - Never add items they didn't mention. Split combined descriptions into separate items ("2 eggs and toast with butter" is three items).
+- A brand they name, or one readable on a pack in a photo, goes in brand and never in name: "Yadav chakli" is name "Chakli", brand "Yadav". Otherwise brand is null.
 - confidence: high when the item and amount are clear, medium when one is guessed, low when both are.`;
 
 function libraryText(lib) {

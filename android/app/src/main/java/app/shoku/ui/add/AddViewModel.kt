@@ -499,14 +499,19 @@ class AddViewModel(
     fun logAi(items: List<ResolvedItem>, status: String) = viewModelScope.launch {
         val now = System.currentTimeMillis()
         val entries = items.mapIndexed { i, it ->
-            // Reference dishes become library foods (with their serving portion) on first use.
-            val (refType, refId) = it.reference?.let { r -> RefType.FOOD to repo.adoptReference(r) } ?: (it.refType to it.refId)
+            // Reference dishes become library foods (with their serving portion) on first use; something the
+            // AI only estimated becomes a library food too, so it's a normal match next time.
+            val (refType, refId) = it.reference?.let { r -> RefType.FOOD to repo.adoptReference(r) }
+                ?: if (it.refType == RefType.QUICK && it.per100 != null) RefType.FOOD to repo.foodForEstimate(it.name, it.per100, brand = it.brand)
+                else (it.refType to it.refId)
             LogEntry(
                 id = ShokuRepository.newId(), date = date.toString(), meal = meal.value,
                 refType = refType, refId = refId, name = it.name, unit = it.unit, qty = it.qty,
                 kcal = it.nutrients?.kcal, protein = it.nutrients?.protein, fibre = it.nutrients?.fibre,
                 carbs = it.nutrients?.carbs, fat = it.nutrients?.fat,
                 status = status, basis = it.basis, source = "ai", createdAt = now + i, updatedAt = now + i,
+                // A brand on something matched to a generic ("Yadav" chakli) is kept as the entry's brand note.
+                variant = it.brand?.takeIf { _ -> it.refType != RefType.QUICK },
             )
         }
         entries.forEach { repo.add(it) }

@@ -40,6 +40,12 @@ open class ShokuApplication : Application() {
         // One-time grouping into generic foods; idempotent, so a flag only saves the work.
         val prefs = getSharedPreferences("app", MODE_PRIVATE)
         appScope.launch {
+            // One time: past quick / AI-estimated entries become library foods (searchable, ranked).
+            if (!prefs.getBoolean("quickToFoods_v1", false)) {
+                runCatching { repository.promoteQuickEntries() }
+                    .onSuccess { prefs.edit().putBoolean("quickToFoods_v1", true).apply() }
+                    .onFailure { android.util.Log.e("Shoku", "Linking estimates failed", it) }
+            }
             if (!prefs.getBoolean("foodFamilies_v1", false)) {
                 runCatching { repository.applyFoodFamilies() }
                     .onSuccess { prefs.edit().putBoolean("foodFamilies_v1", true).apply() }

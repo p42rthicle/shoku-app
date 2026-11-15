@@ -39,6 +39,7 @@ data class AiItem(
     val qty: Double,
     val confidence: String,
     val estimate: AiEstimate? = null,
+    val brand: String? = null,
 )
 
 @Serializable data class AiMealResult(val items: List<AiItem>, val meal: String? = null)
@@ -81,6 +82,8 @@ data class ResolvedItem(
     val said: String,
     /** Set when matched to a reference database dish; it's copied into the library when logged. */
     val reference: ReferenceFood? = null,
+    /** The brand they named or the photo showed ("Yadav"); editable in the review. */
+    val brand: String? = null,
 ) {
     val units: List<String> get() = reference?.units ?: emptyList()
 }
@@ -178,7 +181,7 @@ class AiClient {
             val unit = it.unit.takeIf { u -> u in r.units } ?: r.units.first()
             return@mapNotNull ResolvedItem(
                 r.name, "reference", r.code, unit, it.qty, r.nutrients(unit, it.qty),
-                if (byEye || it.confidence == "low") Basis.ESTIMATE else Basis.TYPICAL, null, it.confidence, it.said, reference = r,
+                if (byEye || it.confidence == "low") Basis.ESTIMATE else Basis.TYPICAL, null, it.confidence, it.said, reference = r, brand = it.brand,
             )
         }
         val ref = it.matchKey?.let { k -> keys.refs[k] }
@@ -192,11 +195,11 @@ class AiClient {
                 generic -> Basis.TYPICAL
                 else -> Basis.EXACT
             }
-            ResolvedItem(library.nameOf(ref.first, ref.second) ?: it.name, ref.first, ref.second, unit, it.qty, n, basis, null, it.confidence, it.said)
+            ResolvedItem(library.nameOf(ref.first, ref.second) ?: it.name, ref.first, ref.second, unit, it.qty, n, basis, null, it.confidence, it.said, brand = it.brand)
         } else {
             val e = it.estimate ?: return@mapNotNull null
             val per100 = Nutrients(e.kcal, e.protein, e.fibre, e.carbs, e.fat)
-            ResolvedItem(it.name, RefType.QUICK, null, "g", e.grams, per100 * (e.grams / 100.0), Basis.ESTIMATE, per100, it.confidence, it.said)
+            ResolvedItem(it.name, RefType.QUICK, null, "g", e.grams, per100 * (e.grams / 100.0), Basis.ESTIMATE, per100, it.confidence, it.said, brand = it.brand)
         }
     }
 }

@@ -238,6 +238,45 @@ class ShokuRepository(private val db: ShokuDatabase, scope: CoroutineScope) {
         }
     }
 
+    /**
+     * A food for something the AI (or a quick entry) only estimated, so it's in the library next time:
+     * an existing food with the same name, or a new one from per-100 values (source "ai-estimate",
+     * listed in Library under "Check foods the AI added").
+     */
+    suspend fun foodForEstimate(name: String, per100: app.shoku.domain.Nutrients, unit: String = "g", brand: String? = null): String = withContext(Dispatchers.IO) {
+        val key = name.trim().lowercase()
+        val b = brand?.trim()?.ifEmpty { null }
+        lib.allFoods().firstOrNull { !it.deleted && it.name.trim().lowercase() == key && (b == null || it.brand.equals(b, ignoreCase = true)) }?.let { f ->
+            if (f.archived) lib.upsertFoods(listOf(f.copy(archived = false, updatedAt = System.currentTimeMillis())))
+            return@withContext f.id
+        }
+        val food = Food(
+            id = newId(), name = name.trim().replaceFirstChar { it.uppercase() }, unit = unit, baseQty = 100.0,
+            kcal = per100.kcal, protein = per100.protein, fibre = per100.fibre, carbs = per100.carbs, fat = per100.fat,
+            brand = b, kind = if (b != null) app.shoku.data.db.FoodKind.PRODUCT else app.shoku.data.db.FoodKind.GENERIC, source = "ai-estimate",
+        )
+        lib.upsertFoods(listOf(food))
+        food.id
+    }
+
+    /**
+     * One time: earlier quick or AI-estimated entries (no library food) become library foods, so they
+     * show up and rank in search. Entries keep their numbers. Returns how many entries were linked.
+     */
+    suspend fun promoteQuickEntries(): Int = withContext(Dispatchers.IO) {
+        val quick = logs.allIncludingDeleted().filter {
+            !it.deleted && it.refType == app.shoku.data.db.RefType.QUICK && it.unit in app.shoku.domain.WEIGHT_UNITS && it.qty > 0 && it.kcal != null
+        }
+        quick.groupBy { it.name.trim().lowercase() }.values.sumOf { group ->
+            val e = group.maxBy { it.createdAt }
+            val f = 100.0 / e.qty
+            val per100 = app.shoku.domain.Nutrients(e.kcal?.times(f), e.protein?.times(f), e.fibre?.times(f), e.carbs?.times(f), e.fat?.times(f))
+            val id = foodForEstimate(e.name, per100, e.unit)
+            group.forEach { logs.upsert(it.copy(refType = app.shoku.data.db.RefType.FOOD, refId = id, updatedAt = System.currentTimeMillis())) }
+            group.size
+        }
+    }
+
     suspend fun savePortions(rows: List<app.shoku.data.db.FoodPortion>) = withContext(Dispatchers.IO) {
         lib.upsertPortions(rows.map { it.copy(updatedAt = System.currentTimeMillis()) })
     }
