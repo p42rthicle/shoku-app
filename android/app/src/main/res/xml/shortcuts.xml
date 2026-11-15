@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="describe"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_describe_short"
+        android:shortcutLongLabel="@string/shortcut_describe">
+        <intent android:action="android.intent.action.VIEW" android:data="shoku://describe" android:targetPackage="app.shoku" android:targetClass="app.shoku.MainActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="scan"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_scan_short"
+        android:shortcutLongLabel="@string/shortcut_scan">
+        <intent android:action="android.intent.action.VIEW" android:data="shoku://scan" android:targetPackage="app.shoku" android:targetClass="app.shoku.MainActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="stock"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_stock_short"
+        android:shortcutLongLabel="@string/shortcut_stock">
+        <intent android:action="android.intent.action.VIEW" android:data="shoku://plan/stock" android:targetPackage="app.shoku" android:targetClass="app.shoku.MainActivity" />
+    </shortcut>
+</shortcuts>

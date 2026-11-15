@@ -1,0 +1,52 @@
+# An older prototype (not part of this repo)
+shoku_streamlit/
+
+# Personal food data and backups
+*.zip
+/data/
+
+# Secrets
+.env
+.env.*
+*.key
+secrets.*
+local.properties
+keystore.properties
+*.jks
+*.keystore
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
+*.iml
+
+# Android / Gradle
+.gradle/
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Node (Catalyst functions)
+node_modules/
+npm-debug.log*
+.catalyst/logs/
+
+# Local copies of the phone database
+/backups/
+releases/
+
+# Claude Code working folders (agent worktrees, local settings)
+.claude/
+
+# Personal or licensed files kept out of the public repo (build them with tools/, see README)
+/resources/
+/PLAN.md
+backend/.catalystrc
+android/app/src/main/assets/reference_indb.csv
+android/app/src/main/assets/reference_bls.csv
+android/app/src/main/assets/off_india.csv
+android/app/src/test/java/app/shoku/LegacyDataTest.kt
+android/app/src/test/java/app/shoku/AiResolveTest.kt
+android/app/src/test/java/app/shoku/FoodFamiliesTest.kt

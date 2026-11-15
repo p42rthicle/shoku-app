@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="widget_bg">#FFFFFF</color>
+    <color name="widget_ink">#09090B</color>
+    <color name="widget_muted">#6B6B74</color>
+    <color name="widget_track">#E4E4E7</color>
+    <color name="widget_chip">#F4F4F5</color>
+    <color name="widget_over">#B4483E</color>
+    <string name="widget_description">Calories left today and quick logging</string>
+    <style name="WidgetButton">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">36dp</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:gravity">center</item>
+        <item name="android:background">@drawable/widget_button_bg</item>
+        <item name="android:textColor">@color/widget_ink</item>
+        <item name="android:textSize">13sp</item>
+    </style>
+</resources>

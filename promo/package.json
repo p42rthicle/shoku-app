@@ -1,0 +1,27 @@
+{
+  "name": "shoku-promo",
+  "private": true,
+  "description": "Shoku's showcase video, made in code with Remotion from docs/screenshots.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "render": "remotion render src/index.ts Showcase ../docs/media/shoku-demo.mp4",
+    "render:ffmpeg": "python3 scripts/fallback_render.py",
+    "gif": "sh scripts/gif.sh",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.543",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "remotion": "4.0.543"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "typescript": "~5.9.3"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "api",
+  "version": "1.0.0",
+  "main": "index.js",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0",
+    "zcatalyst-sdk-node": "^3.4.0"
+  }
+}
