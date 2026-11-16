@@ -25,6 +25,15 @@ data class Release(val version: String, val date: String, val changes: List<Stri
  */
 val CHANGELOG = listOf(
     Release(
+        "0.9.31", "16 Nov 2026",
+        listOf(
+            "Archived foods (end of Library › Foods) lists only foods you archived, not the old \"Apple (m)\" size rows kept for past entries",
+            "Search Everything finds archived foods too, marked \"Archived\", to open, bring back or delete; logging never offers them",
+            "Deleting a logged item: the entry's sheet has a labelled Delete button, and any entry (eaten too) can be swiped away, with Undo",
+            "The entry's brand field is called \"Brand\" (the note has its own field)",
+        ),
+    ),
+    Release(
         "0.9.3", "16 Nov 2026",
         listOf(
             "Back from anything you opened in Search (a food, a stock item, a dish) returns to your search, with the same words and scroll",

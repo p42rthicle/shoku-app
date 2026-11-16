@@ -248,10 +248,10 @@ private fun LibraryList(
                 if (query.isBlank() && foods.size > 20) item(key = "foods-more") {
                     app.shoku.ui.components.SeeMoreChip(foods.size, 20, vm.showAllFoods, { vm.showAllFoods = !vm.showAllFoods }, what = "foods")
                 }
-                val archivedFoods = library.foods.values.filter { it.archived && !it.deleted && matchesAll(library.searchText(it), query) }.sortedBy { it.name.lowercase() }
+                val archivedFoods = library.foods.values.filter { it.archived && !it.deleted && !app.shoku.domain.FoodFamilies.isHiddenSizeRow(it) && matchesAll(library.searchText(it), query) }.sortedBy { it.name.lowercase() }
                 if (archivedFoods.isNotEmpty()) {
                     val openArch = vm.showArchivedFoods || query.isNotBlank()
-                    item(key = "foods-archived-head") { CollapsibleHeader("Archived", archivedFoods.size, openArch) { vm.showArchivedFoods = !vm.showArchivedFoods } }
+                    item(key = "foods-archived-head") { CollapsibleHeader("Archived foods", archivedFoods.size, openArch) { vm.showArchivedFoods = !vm.showArchivedFoods } }
                     if (openArch) item(key = "foods-archived") { ListCard(archivedFoods, key = { "a-" + it.id }) { f -> FoodRow(library, f, data.usageCount("food", f.id)) { editingFood = f } } }
                 }
                 // Not in the library yet: the Indian and German databases, then Open Food Facts.

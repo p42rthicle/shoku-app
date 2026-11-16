@@ -601,7 +601,7 @@ private fun MealHeader(
 private fun MealEntry(entry: LogEntry, library: Library?, onToggle: (LogEntry) -> Unit, onEdit: (LogEntry) -> Unit, onDelete: (LogEntry) -> Unit) {
     Column(Modifier.fillMaxWidth().cardPiece(CardPiece.Middle, ShokuSpacing.Gap).padding(horizontal = 18.dp)) {
         Hairline()
-        SwipeToDelete(enabled = entry.status != EntryStatus.EATEN, onDelete = { onDelete(entry) }) {
+        SwipeToDelete(enabled = true, onDelete = { onDelete(entry) }) {
             // Foods show their current name and brand chip; dishes, batches and quick entries keep the logged name.
             val food = if (entry.refType == RefType.FOOD) entry.refId?.let { library?.foods?.get(it) } else null
             EntryRow(
@@ -644,7 +644,7 @@ private fun MealFooter(meal: MealUi, onAdd: () -> Unit, onRemovePlanned: () -> U
     }
 }
 
-/** Swipe left or right to delete. Only offered for entries that weren't eaten. */
+/** Swipe left or right to delete (an Undo snackbar follows). */
 @Composable
 internal fun SwipeToDelete(enabled: Boolean, onDelete: () -> Unit, content: @Composable () -> Unit) {
     if (!enabled) {

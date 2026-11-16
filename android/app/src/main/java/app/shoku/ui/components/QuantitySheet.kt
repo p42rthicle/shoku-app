@@ -194,7 +194,7 @@ fun QuantitySheet(
             }
             if (askVariant) {
                 Spacer(Modifier.height(12.dp))
-                LabeledField("Brand or note (optional)", variant, { variant = it }, Modifier.fillMaxWidth(), placeholder = "e.g. Weihenstephan")
+                LabeledField("Brand (optional)", variant, { variant = it }, Modifier.fillMaxWidth(), placeholder = "e.g. Weihenstephan")
             }
 
             if (units.size > 1) {
@@ -268,10 +268,15 @@ fun QuantitySheet(
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (onDelete != null) {
-                    Box(
-                        Modifier.size(54.dp).clip(ShokuShapes.Button).border(1.dp, ShokuColors.Line, ShokuShapes.Button).clickable(onClick = onDelete),
-                        contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Outlined.Delete, contentDescription = "Delete", tint = ShokuColors.Ink) }
+                    // Labelled: a bare bin icon was easy to miss.
+                    Row(
+                        Modifier.height(54.dp).clip(ShokuShapes.Button).border(1.dp, ShokuColors.Line, ShokuShapes.Button).clickable(onClick = onDelete).padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Outlined.Delete, contentDescription = null, tint = ShokuColors.Ink, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Delete", style = MaterialTheme.typography.labelLarge, color = ShokuColors.Ink)
+                    }
                 }
                 PrimaryButton(
                     text = if (valid) "$confirmLabel · ${formatUnitQty(qty!!, unit)}" else confirmLabel,

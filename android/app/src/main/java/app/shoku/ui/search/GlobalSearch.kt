@@ -1,5 +1,6 @@
 package app.shoku.ui.search
 
+import app.shoku.domain.FoodFamilies
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -167,10 +168,11 @@ fun GlobalSearchScreen(library: Library?, planVm: app.shoku.ui.plan.PlanViewMode
                 val d = LocalDate.parse(e.date)
                 Hit(e.name, e.variant, "${e.meal} · ${d.shortLabel()} · ${formatUnitQty(e.qty, e.unit)}${e.kcal?.let { " · ${Math.round(it)} kcal" } ?: ""}${e.note?.let { " · 📝 $it" } ?: ""}") { actions.openDay(d) }
             })
-        add("Your foods" to library.foods.values.filter { !it.deleted && !it.archived }
+        // Archived foods are found here (to open, bring back or delete), never when logging.
+        add("Your foods" to library.foods.values.filter { !it.deleted && !FoodFamilies.isHiddenSizeRow(it) }
             .map { f -> f to matchScore(q, searchKey("${f.name} ${f.brand.orEmpty()}"), searchKey(f.aliases)) }
             .filter { it.second > 0 }.sortedByDescending { it.second }.take(30).map { (f, _) ->
-                Hit(f.name, if (f.kind == FoodKind.GENERIC) "Any brand" else f.brand, "per ${formatUnitQty(f.baseQty, f.unit)} · ${f.kcal?.let { Math.round(it) } ?: "?"} kcal") { actions.openFood(f.id) }
+                Hit(f.name, if (f.kind == FoodKind.GENERIC) "Any brand" else f.brand, (if (f.archived) "Archived · " else "") + "per ${formatUnitQty(f.baseQty, f.unit)} · ${f.kcal?.let { Math.round(it) } ?: "?"} kcal") { actions.openFood(f.id) }
             })
         add("Dishes and batches" to (
             library.dishes.values.filter { !it.deleted && hit(it.name) }.map { d -> Hit(d.name, null, if (d.archived) "Dish · archived" else "Dish") { actions.openDish(d.id) } } +

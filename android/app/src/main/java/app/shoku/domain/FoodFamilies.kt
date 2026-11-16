@@ -103,6 +103,12 @@ object FoodFamilies {
     fun genericId(key: String): String = UUID.nameUUIDFromBytes("generic|$key".toByteArray()).toString()
     fun portionId(foodId: String, label: String): String = UUID.nameUUIDFromBytes("portion|$foodId|$label".toByteArray()).toString()
 
+    /**
+     * The old "Apple (m)" rows that became units of their family: kept (archived) so past entries still point
+     * somewhere, but not foods you archived, so they're not listed, searched or offered anywhere.
+     */
+    fun isHiddenSizeRow(f: app.shoku.data.db.Food): Boolean = f.archived && f.parentId != null && sizeLabel(f.name) != null
+
     /** "(s)" -> small, "(m)" -> medium, "(l)" -> large, "(clove)" -> clove. */
     fun sizeLabel(variantName: String): String? = when (Regex("""\(([a-z]+)\)\s*$""").find(variantName)?.groupValues?.get(1)) {
         "s" -> "small"
