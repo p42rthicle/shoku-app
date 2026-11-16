@@ -251,6 +251,7 @@ fun ShokuApp() {
                     },
                     onLogBatch = { d, id -> addTarget = AddTarget(d, mealForNow(d), batchId = id) },
                     onSearch = { searchOpen = true },
+                    onOpenSupplements = { planVm.menuOpen = false; planVm.section = 1; go(Tab.Plan) },
                     onOpenItem = { type, id ->
                         libraryVm.backToList()
                         libraryVm.open(if (type == app.shoku.data.db.RefType.DISH) app.shoku.ui.library.LibRoute.DishDetail(id) else app.shoku.ui.library.LibRoute.BatchDetail(id))

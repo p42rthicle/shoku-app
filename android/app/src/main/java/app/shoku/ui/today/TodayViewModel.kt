@@ -1,5 +1,7 @@
 package app.shoku.ui.today
 
+import app.shoku.domain.lastsUntilOrNull
+import app.shoku.domain.asNeeded
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.shoku.data.ShokuRepository
@@ -53,6 +55,8 @@ data class TodayState(
     val loaded: Boolean = false,
     /** Today's usual for the meal it's time for, while that meal is still empty. */
     val usual: UsualMeal? = null,
+    /** Supplements running out within two weeks (name, last day covered), soonest first. */
+    val runningLow: List<Pair<String, LocalDate>> = emptyList(),
     /** Per meal: supplements due that day, and whether each was taken. */
     val supplements: Map<String, List<Pair<app.shoku.data.db.Supplement, Boolean>>> = emptyMap(),
     /** The day's plan for meals still empty, ready to add in one tap. */
@@ -99,9 +103,16 @@ class TodayViewModel(
             val shown = base.meals.map { it.meal }.toSet()
             val withSupps = (base.meals + dueBySlot.keys.filter { it !in shown }.map { MealUi(it, emptyList()) })
                 .sortedBy { Meals.ALL.indexOf(it.meal).let { i -> if (i < 0) 99 else i } }
+            val today = LocalDate.now()
+            val low = if (d != today) emptyList() else supps.supplements.filter { it.active && !it.asNeeded }.mapNotNull { s ->
+                val left = app.shoku.domain.supplementStock(supps.stockItem(s), supps.doses, supps.moves) ?: return@mapNotNull null
+                val until = s.lastsUntilOrNull(left, today) ?: return@mapNotNull null
+                if (until.isAfter(today.plusDays(14))) null else s.name to until
+            }.sortedBy { it.second }
             base.copy(
                 meals = withSupps,
                 supplements = dueBySlot,
+                runningLow = low,
                 plan = library.planEntries(plan, d, all, ShokuRepository.defaultStatusFor(d), skip, Meals.ALL, chosen).takeIf { it.entries.isNotEmpty() },
                 planChoices = Meals.ALL.filter { it !in skip }.mapNotNull { m ->
                     val options = plan.templates.filter { !it.deleted && it.meal == m }

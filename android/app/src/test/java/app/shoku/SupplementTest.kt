@@ -41,4 +41,18 @@ class SupplementTest {
         assertEquals(4, app.shoku.domain.supplementStreak(listOf(zinc), doses + dose("2026-11-14"), today))
         assertEquals(3, app.shoku.domain.supplementStreak(listOf(d3), listOf(app.shoku.data.db.SupplementDose("d3|2026-11-15", "d3", "2026-11-15", 1.0), app.shoku.data.db.SupplementDose("d3|2026-11-22", "d3", "2026-11-22", 1.0), app.shoku.data.db.SupplementDose("d3|2026-11-29", "d3", "2026-11-29", 1.0)), LocalDate.of(2026, 12, 2)))
     }
+
+    @Test
+    fun stockCountedOnAPastDayTakesOffTheTicksSince() {
+        val zone = java.time.ZoneId.systemDefault()
+        val day = LocalDate.of(2026, 11, 1)
+        // "I had 60 on 1 Nov" (start of that day), then ticked 1, 2 and 10 Nov; one tick in October doesn't count.
+        val item = app.shoku.data.db.StockItem("stock-z", "Zinc", supplementId = "z", unit = "tablet", countQty = 60.0, countedAt = day.atStartOfDay(zone).toInstant().toEpochMilli())
+        val late = LocalDate.of(2026, 11, 16).atStartOfDay(zone).toInstant().toEpochMilli() // ticked later, on the day itself
+        val doses = listOf("2026-10-31", "2026-11-01", "2026-11-02", "2026-11-10").map { app.shoku.data.db.SupplementDose("z|$it", "z", it, 1.0, updatedAt = late) }
+        assertEquals(57.0, app.shoku.domain.supplementStock(item, doses, emptyList())!!, 0.01)
+        // Counted "now" on 16 Nov: earlier days' ticks were already in the count.
+        val now = item.copy(countedAt = late + 1000)
+        assertEquals(60.0, app.shoku.domain.supplementStock(now, doses, emptyList())!!, 0.01)
+    }
 }

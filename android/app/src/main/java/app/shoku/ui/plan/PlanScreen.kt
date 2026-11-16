@@ -283,9 +283,9 @@ class PlanViewModel(
 
     fun toggleToday(s: Supplement, taken: Boolean) = viewModelScope.launch { home.setTaken(s, LocalDate.now(), !taken) }
 
-    fun saveSupplement(s: Supplement, newCount: Double?) = viewModelScope.launch {
+    fun saveSupplement(s: Supplement, newCount: Double?, on: LocalDate = LocalDate.now()) = viewModelScope.launch {
         home.saveSupplement(s)
-        if (newCount != null) home.countSupplement(s, newCount)
+        if (newCount != null) home.countSupplement(s, newCount, on)
     }
 }
 
@@ -362,7 +362,7 @@ fun PlanScreen(vm: PlanViewModel, contentPadding: PaddingValues) {
     }
     editing?.let { s ->
         SupplementEditor(
-            s, supps, onSave = { updated, count -> vm.saveSupplement(updated, count); editing = null }, onDismiss = { editing = null },
+            s, supps, onSave = { updated, count, on -> vm.saveSupplement(updated, count, on); editing = null }, onDismiss = { editing = null },
             isNew = supps.supplements.none { it.id == s.id },
             onDelete = { vm.saveSupplement(it.copy(deleted = true), null); editing = null },
         )

@@ -1,5 +1,6 @@
 package app.shoku.ui.today
 
+import app.shoku.ui.dayMonth
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -108,6 +109,8 @@ fun TodayScreen(
     onOpenItem: (refType: String, refId: String) -> Unit = { _, _ -> },
     /** Opens the global search. */
     onSearch: () -> Unit = {},
+    /** Opens Plan > Supplements. */
+    onOpenSupplements: () -> Unit = {},
     /** Opens Add with a batch's amount sheet (a fridge card). */
     onLogBatch: (date: LocalDate, batchId: String) -> Unit = { d, _ -> onAdd(d, null) },
 ) {
@@ -196,6 +199,17 @@ fun TodayScreen(
                     }
                 }
                 item(key = "summary") { DaySummary(state, onRemovePlanned = { removePlanned(null) }) }
+                // Supplements about to run out: time to order.
+                if (state.runningLow.isNotEmpty()) item(key = "low") {
+                    OutlinedCard(Modifier.fillMaxWidth(), onClick = onOpenSupplements) {
+                        Text("Running low", style = MaterialTheme.typography.titleMedium)
+                        state.runningLow.forEach { (name, until) ->
+                            val by = until.minusDays(7)
+                            Text("$name · lasts until ${until.dayMonth()} · ${if (!by.isAfter(LocalDate.now())) "order now" else "order by ${by.dayMonth()}"}",
+                                style = MaterialTheme.typography.bodyMedium, color = ShokuColors.Muted)
+                        }
+                    }
+                }
 
                 if (state.plan != null || state.planChoices.isNotEmpty()) {
                     val p = state.plan
@@ -723,22 +737,47 @@ private fun PlanCard(
     onCook: () -> Unit,
 ) {
     val entries = p?.entries.orEmpty()
+    // Folded away (remembered across days): just the title, totals and an "Add as per plan" chip.
+    val prefs = androidx.compose.ui.platform.LocalContext.current.getSharedPreferences("today_ui", android.content.Context.MODE_PRIVATE)
+    var folded by remember { mutableStateOf(prefs.getBoolean("planFolded", false)) }
+    fun toggle() { folded = !folded; prefs.edit().putBoolean("planFolded", folded).apply() }
     OutlinedCard(Modifier.fillMaxWidth()) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { toggle() }, verticalAlignment = Alignment.CenterVertically) {
             Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
             Column(horizontalAlignment = Alignment.End) {
                 Text("${Math.round(entries.sumOf { it.kcal ?: 0.0 })} kcal", style = app.shoku.ui.theme.NumberStyle.Row)
                 Text("${Math.round(entries.sumOf { it.protein ?: 0.0 })} g protein", style = MaterialTheme.typography.bodySmall, color = ShokuColors.Muted)
             }
+            Spacer(Modifier.width(6.dp))
+            Icon(
+                if (folded) Icons.Rounded.KeyboardArrowDown else Icons.Rounded.KeyboardArrowUp,
+                contentDescription = if (folded) "Show the plan" else "Hide the plan",
+                tint = ShokuColors.Muted,
+            )
         }
+        if (folded && entries.isNotEmpty()) {
+            Spacer(Modifier.height(10.dp))
+            Box(Modifier.clip(CircleShape).clickable(onClick = onAdd)) { StatusChip("Add as per plan · ${entries.size} items", ChipStyle.Tinted) }
+        }
+        AnimatedVisibility(!folded) { Column {
         Spacer(Modifier.height(6.dp))
         choices.forEach { c ->
             var open by remember { mutableStateOf(false) }
             Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                // What will actually be added (your fridge batches in place of "sabzi or dal"), not the template's name.
+                val items = entries.filter { it.meal == c.meal }
                 Column(Modifier.weight(1f)) {
-                    Text(c.meal, style = MaterialTheme.typography.labelMedium, color = ShokuColors.Muted)
-                    Text(c.current?.name ?: "Not adding", style = MaterialTheme.typography.bodyLarge, color = if (c.current == null) ShokuColors.Muted else ShokuColors.Ink, maxLines = 1,
+                    Text(c.meal + (c.current?.let { " · ${it.name}" } ?: ""), style = MaterialTheme.typography.labelMedium, color = ShokuColors.Muted, maxLines = 1,
                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    Text(
+                        when {
+                            c.current == null -> "Not adding"
+                            items.isEmpty() -> "Nothing to add"
+                            else -> items.joinToString(" · ") { e -> if (e.refType == app.shoku.data.db.RefType.BATCH) "${e.name} (fridge)" else e.name }
+                        },
+                        style = MaterialTheme.typography.bodyLarge, color = if (items.isEmpty()) ShokuColors.Muted else ShokuColors.Ink, maxLines = 3,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
                 }
                 Box {
                     Box(Modifier.clip(CircleShape).clickable { open = true }) { StatusChip("Change", ChipStyle.Tinted) }
@@ -754,10 +793,6 @@ private fun PlanCard(
                 }
             }
         }
-        if (p?.fromFridge?.isNotEmpty() == true) {
-            Spacer(Modifier.height(6.dp))
-            Text("From the fridge: ${p.fromFridge.joinToString(", ")}", style = MaterialTheme.typography.bodySmall, color = ShokuColors.Muted)
-        }
         if (p?.missingSlots?.isNotEmpty() == true) {
             Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -767,5 +802,6 @@ private fun PlanCard(
         }
         Spacer(Modifier.height(14.dp))
         if (entries.isNotEmpty()) app.shoku.ui.components.PrimaryButton("Add as planned · ${entries.size} items", onClick = onAdd)
+        } }
     }
 }

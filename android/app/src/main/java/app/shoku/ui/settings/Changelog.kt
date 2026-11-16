@@ -25,6 +25,18 @@ data class Release(val version: String, val date: String, val changes: List<Stri
  */
 val CHANGELOG = listOf(
     Release(
+        "0.9.2", "16 Nov 2026",
+        listOf(
+            "Today's plan uses what you cooked: your rice batch stands in for the template's rice, and the sabzi slot takes a curry batch (never rice); each meal on the card lists what it will actually add, fridge batches marked",
+            "Fixed a freeze when logging with AI: the loader shows at once, the lookups run in the background, and a second tap is ignored",
+            "Searching is much faster everywhere",
+            "\"Usual for…\" and search favour what you've eaten lately, not habits from months ago",
+            "Supplements: tell it how many you had and on which day, and it takes off every dose you've ticked since, then says how long the stock lasts and when to order (a week ahead)",
+            "Today shows a \"Running low\" card when a supplement runs out within two weeks",
+            "Today's plan folds away with the arrow by its title; folded, it's one line with an \"Add as per plan\" chip (it stays folded until you open it)",
+        ),
+    ),
+    Release(
         "0.9.1", "16 Nov 2026",
         listOf(
             "Indian packaged foods scan offline: 15,000 products from Open Food Facts are built into the app",
@@ -37,10 +49,6 @@ val CHANGELOG = listOf(
             "A food you archived no longer hides it from the food databases; picking it brings it back",
             "Anything the AI estimates (plate photo, describe) is saved to your library when logged, so next time it's a normal match; past estimates were converted too",
             "AI keeps brands apart: \"Yadav chakli\" becomes Chakli with the brand Yadav; tap an item in the AI review to set or fix its brand",
-            "Today's plan uses what you cooked: your rice batch stands in for the template's rice, and the sabzi slot takes a curry batch (never rice); the card lists what's from the fridge",
-            "Fixed a freeze when logging with AI: the loader shows at once, the lookups run in the background, and a second tap is ignored",
-            "Searching is much faster everywhere",
-            "\"Usual for…\" and search favour what you've eaten lately, not habits from months ago",
             "Smaller download for shared builds (about 5 MB)",
         ),
     ),

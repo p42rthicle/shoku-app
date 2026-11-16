@@ -59,6 +59,16 @@ import app.shoku.ui.theme.ShokuShapes
 import java.time.LocalDate
 
 /** Stock left and the day it runs out, e.g. "112 left · lasts until 6 Mar". */
+/** " · order by 12 Mar" when it runs out within six weeks: a week's margin for delivery. */
+private fun orderBy(until: LocalDate, today: LocalDate): String {
+    val by = until.minusDays(7)
+    return when {
+        until.isAfter(today.plusWeeks(6)) -> ""
+        !by.isAfter(today) -> " · order now"
+        else -> " · order by ${by.dayMonth()}"
+    }
+}
+
 fun stockLine(s: Supplement, st: SupplementState, today: LocalDate = LocalDate.now()): String {
     val left = supplementStock(st.stockItem(s), st.doses, st.moves) ?: return "Stock not counted"
     val until = s.lastsUntil(left, today)
@@ -70,7 +80,7 @@ fun stockLine(s: Supplement, st: SupplementState, today: LocalDate = LocalDate.n
         end != null && (until == null || until >= end) -> " · enough until the course ends (${end.dayMonth()})"
         until == null -> " · enough for over 2 years"
         until.isBefore(today) -> " · run out"
-        else -> " · lasts until ${until.dayMonth()}"
+        else -> " · lasts until ${until.dayMonth()}" + orderBy(until, today)
     }
 }
 
@@ -137,7 +147,7 @@ private val WEEKDAYS = listOf("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")
 /** Edit dose, slot, schedule, stock count and on/off. Multi-step schedules (D3) are kept unless changed. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SupplementEditor(s: Supplement, st: SupplementState, onSave: (Supplement, Double?) -> Unit, onDismiss: () -> Unit, isNew: Boolean = false, onDelete: ((Supplement) -> Unit)? = null) {
+fun SupplementEditor(s: Supplement, st: SupplementState, onSave: (Supplement, Double?, LocalDate) -> Unit, onDismiss: () -> Unit, isNew: Boolean = false, onDelete: ((Supplement) -> Unit)? = null) {
     var name by remember { mutableStateOf(s.name) }
     var detail by remember { mutableStateOf(s.detail) }
     var unit by remember { mutableStateOf(s.unit) }
@@ -150,6 +160,9 @@ fun SupplementEditor(s: Supplement, st: SupplementState, onSave: (Supplement, Do
     var active by remember { mutableStateOf(s.active) }
     val current = supplementStock(st.stockItem(s), st.doses, st.moves)
     var count by remember { mutableStateOf(current?.let { formatQty(it) } ?: "") }
+    // "I had N on <day>": ticks from that day on are taken off (so a pack opened last week works too).
+    var countedOn by remember { mutableStateOf(LocalDate.now()) }
+    var pickingDay by remember { mutableStateOf(false) }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = ShokuColors.Paper, shape = ShokuShapes.Sheet) {
         Column(
@@ -163,7 +176,14 @@ fun SupplementEditor(s: Supplement, st: SupplementState, onSave: (Supplement, Do
                 LabeledField("Dose", dose, { dose = it }, Modifier.weight(1f), numeric = true, suffix = unit)
                 LabeledField("One is a", unit, { unit = it.trim() }, Modifier.weight(1f), placeholder = "tablet, capsule, g")
             }
-            LabeledField("Have now", count, { count = it }, Modifier.fillMaxWidth(), numeric = true, suffix = unit)
+            LabeledField(if (countedOn == LocalDate.now()) "How many you have now" else "How many you had", count, { count = it }, Modifier.fillMaxWidth(), numeric = true, suffix = unit)
+            Text(
+                "On: ${if (countedOn == LocalDate.now()) "today" else countedOn.dayMonth()} · change" +
+                    if (countedOn != LocalDate.now()) " (doses you ticked since then come off)" else "",
+                style = MaterialTheme.typography.labelLarge, color = ShokuColors.Ink,
+                modifier = Modifier.clip(ShokuShapes.Button).clickable { pickingDay = true }.padding(vertical = 6.dp),
+            )
+            if (pickingDay) app.shoku.ui.components.DatePick(countedOn, onPick = { if (!it.isAfter(LocalDate.now())) countedOn = it }, onDismiss = { pickingDay = false })
             Text("Take with", style = MaterialTheme.typography.titleSmall, color = ShokuColors.Muted)
             Segmented(Slots.ALL.dropLast(1), Slots.ALL.indexOf(slot).coerceIn(0, 3)) { slot = Slots.ALL[it] }
             Text("How often", style = MaterialTheme.typography.titleSmall, color = ShokuColors.Muted)
@@ -191,8 +211,8 @@ fun SupplementEditor(s: Supplement, st: SupplementState, onSave: (Supplement, Do
                     ScheduleRule.DAY -> encodeSchedule(listOf(ScheduleRule(ScheduleRule.DAY)))
                     else -> encodeSchedule(listOf(ScheduleRule(kind, day)))
                 }
-                val newCount = count.toAmount()?.takeIf { it >= 0 && it != current }
-                onSave(s.copy(name = name.trim(), detail = detail.trim(), unit = unit.ifBlank { s.unit }, dose = dose.toAmount()?.takeIf { it > 0 } ?: s.dose, slot = slot, schedule = schedule, active = active), newCount)
+                val newCount = count.toAmount()?.takeIf { it >= 0 && (it != current || countedOn != LocalDate.now()) }
+                onSave(s.copy(name = name.trim(), detail = detail.trim(), unit = unit.ifBlank { s.unit }, dose = dose.toAmount()?.takeIf { it > 0 } ?: s.dose, slot = slot, schedule = schedule, active = active), newCount, countedOn)
             })
             if (!isNew && onDelete != null) {
                 var confirm by remember { mutableStateOf(false) }

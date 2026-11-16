@@ -61,8 +61,9 @@ class HomeRepository(private val db: ShokuDatabase, scope: CoroutineScope) {
     }
 
     /** "I have N now": a fresh count of a supplement's stock. */
-    suspend fun countSupplement(s: Supplement, qty: Double) = withContext(Dispatchers.IO) {
-        val now = System.currentTimeMillis()
+    /** "I had [qty] on [on]": a count on a day (today = right now); doses ticked since then come off it. */
+    suspend fun countSupplement(s: Supplement, qty: Double, on: LocalDate = LocalDate.now()) = withContext(Dispatchers.IO) {
+        val now = if (on >= LocalDate.now()) System.currentTimeMillis() else on.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
         val existing = home.allStock().firstOrNull { it.supplementId == s.id && !it.deleted }
         home.upsertStock(listOf(
             existing?.copy(countQty = qty, countedAt = now, updatedAt = now)

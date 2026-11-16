@@ -72,7 +72,12 @@ fun Supplement.scheduleText(): String {
  */
 fun supplementStock(item: StockItem?, doses: List<SupplementDose>, moves: List<StockMove>): Double? {
     val count = item?.countQty ?: return null
-    val used = doses.filter { it.supplementId == item.supplementId && it.taken && !it.deleted && it.updatedAt > item.countedAt }.sumOf { it.qty }
+    // Counted on a past day (00:00): every dose of that day and after. Counted "now": doses ticked after it,
+    // plus any later days ticked in advance.
+    val countedDay = java.time.Instant.ofEpochMilli(item.countedAt).atZone(java.time.ZoneId.systemDefault()).toLocalDate().toString()
+    val used = doses.filter { d ->
+        d.supplementId == item.supplementId && d.taken && !d.deleted && (d.date > countedDay || (d.date == countedDay && d.updatedAt > item.countedAt))
+    }.sumOf { it.qty }
     val added = moves.filter { it.itemId == item.id && !it.deleted && it.at > item.countedAt }.sumOf { it.delta }
     return count - used + added
 }
@@ -120,4 +125,11 @@ fun supplementStreak(supplements: List<Supplement>, doses: List<SupplementDose>,
         if (s.taken == s.due) streak++ else if (d != today) break
     }
     return streak
+}
+
+/** The last day the stock covers, or null when it's enough (over two years, or past the end of the course). */
+fun Supplement.lastsUntilOrNull(stock: Double, from: LocalDate): LocalDate? {
+    val until = lastsUntil(stock, from) ?: return null
+    val end = endDate?.let(LocalDate::parse)
+    return if (end != null && until >= end) null else until
 }

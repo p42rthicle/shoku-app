@@ -27,8 +27,8 @@ android {
         applicationId = "app.shoku"
         minSdk = 31
         targetSdk = 36
-        versionCode = 4
-        versionName = "0.9.1"
+        versionCode = 5
+        versionName = "0.9.2"
         buildConfigField("String", "SYNC_URL", "\"${localProps.getProperty("shoku.syncUrl", "")}\"")
         buildConfigField("String", "SYNC_KEY", "\"${localProps.getProperty("shoku.syncKey", "")}\"")
     }
