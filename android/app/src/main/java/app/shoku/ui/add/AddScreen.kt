@@ -95,6 +95,8 @@ fun AddScreen(
     startBatchId: String? = null,
     /** Search text to start with (from global search). */
     startQuery: String? = null,
+    /** "Add to stock instead": bought something rather than ate it. */
+    onAddToStock: (() -> Unit)? = null,
 ) {
     LaunchedEffect(Unit) { startQuery?.takeIf { it.isNotBlank() }?.let { vm.query.value = it } }
     LaunchedEffect(Unit) { startBarcode?.let { vm.onBarcode(it) } }
@@ -206,6 +208,13 @@ fun AddScreen(
                 Column(Modifier.weight(1f)) {
                     Text("Add to $meal", style = MaterialTheme.typography.headlineMedium)
                     Text("${vm.date.relativeTitle()} · ${vm.date.shortLabel()}", style = MaterialTheme.typography.bodyMedium, color = ShokuColors.Muted)
+                    // Bought it rather than ate it? The same + button adds to stock.
+                    if (onAddToStock != null) {
+                        Spacer(Modifier.height(6.dp))
+                        Box(Modifier.clip(androidx.compose.foundation.shape.CircleShape).clickable(onClick = onAddToStock)) {
+                            app.shoku.ui.components.StatusChip("+ Add to stock instead", app.shoku.ui.components.ChipStyle.Tinted)
+                        }
+                    }
                 }
                 SquareIconButton(Icons.Outlined.QrCodeScanner, "Scan a barcode", onClick = ::startScan)
             }

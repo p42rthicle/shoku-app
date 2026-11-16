@@ -117,6 +117,7 @@ fun DuplicatesSheet(onDismiss: () -> Unit) {
                                     scope.launch {
                                         app.repository.mergeFoods(plan)
                                         merged++
+                                        android.widget.Toast.makeText(context, "Merged into ${plan.food.name}", android.widget.Toast.LENGTH_SHORT).show()
                                     }
                                 },
                                 onIgnore = {

@@ -114,6 +114,8 @@ fun ShokuApp() {
     var showDesign by rememberSaveable { mutableStateOf(false) }
     var showGuide by rememberSaveable { mutableStateOf(false) }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
+    // Add to stock from Today's + (Add › "Add to stock instead"): the stock sheets, shown over Today.
+    val homeStockUi = remember { app.shoku.ui.plan.StockUi() }
     // The search's query and scroll survive a trip to a result and back.
     val searchUi = remember { app.shoku.ui.search.SearchUi() }
     fun openSearch() { app.shoku.ui.search.SearchReturn.action = null; searchUi.reset(); searchOpen = true }
@@ -300,6 +302,9 @@ fun ShokuApp() {
             ) }
         }
 
+        // Library has its own stock sheets; elsewhere these show the ones started from Add.
+        if (tab != Tab.Library) app.shoku.ui.plan.StockSheets(planVm, homeStockUi)
+
         addTarget?.let { target ->
             val addVm: AddViewModel = viewModel(
                 key = "add-${target.date}-${target.meal}-${System.identityHashCode(target)}",
@@ -309,6 +314,7 @@ fun ShokuApp() {
                 AddScreen(
                     addVm, snackbar, onClose = { addTarget = null }, startDescribing = target.describe, startBarcode = target.barcode,
                     startPlate = target.plate, startScanner = target.scanner, startBatchId = target.batchId, startQuery = target.query,
+                    onAddToStock = { addTarget = null; homeStockUi.searching = true },
                     onCook = { name ->
                         // Cook in Library, then come back to this Add with the new batch ready to log.
                         val back = target.copy(describe = false, barcode = null, plate = false, scanner = false, batchId = null)

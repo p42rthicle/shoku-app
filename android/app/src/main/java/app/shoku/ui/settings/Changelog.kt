@@ -25,6 +25,13 @@ data class Release(val version: String, val date: String, val changes: List<Stri
  */
 val CHANGELOG = listOf(
     Release(
+        "0.9.32", "16 Nov 2026",
+        listOf(
+            "Today's + button can add to stock too: \"+ Add to stock instead\" at the top of Add opens the stock sheet (search, scan, label, pack) right there",
+            "A short confirmation when stock is added, updated or removed, something moves to Supplements, or foods are merged",
+        ),
+    ),
+    Release(
         "0.9.31", "16 Nov 2026",
         listOf(
             "Archived foods (end of Library › Foods) lists only foods you archived, not the old \"Apple (m)\" size rows kept for past entries",

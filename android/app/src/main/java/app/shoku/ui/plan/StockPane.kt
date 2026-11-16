@@ -90,7 +90,10 @@ fun StockSheets(vm: PlanViewModel, ui: StockUi) {
                     draft, supps, isNew = true,
                     initialCount = lib.portionsOf(food).firstOrNull { it.label == "pack" }?.qty,
                     header = { KindSwitch(true) { asSupplement = it } },
-                    onSave = { s, count, on -> vm.foodToSupplement(food, s, count, on) },
+                    onSave = { s, count, on ->
+                        vm.foodToSupplement(food, s, count, on)
+                        android.widget.Toast.makeText(context, "${s.name} added to Supplements", android.widget.Toast.LENGTH_SHORT).show()
+                    },
                     onDismiss = { vm.amountFor.value = null },
                 )
                 return@let
@@ -114,7 +117,10 @@ fun StockSheets(vm: PlanViewModel, ui: StockUi) {
                 initialStatus = app.shoku.data.db.EntryStatus.EATEN,
                 nutrientsFor = { u, q -> lib.entryNutrients(app.shoku.data.db.RefType.FOOD, food.id, u, q) },
                 confirmLabel = "Add to stock", showStatus = false,
-                onConfirm = { r -> vm.addStock(food, r.unit, r.qty, place) },
+                onConfirm = { r ->
+                    vm.addStock(food, r.unit, r.qty, place)
+                    android.widget.Toast.makeText(context, "Added ${app.shoku.ui.formatUnitQty(r.qty, r.unit)} ${food.name} to stock", android.widget.Toast.LENGTH_SHORT).show()
+                },
                 onDismiss = { vm.amountFor.value = null },
             )
         }
@@ -123,8 +129,16 @@ fun StockSheets(vm: PlanViewModel, ui: StockUi) {
         stock.levels.firstOrNull { it.item.id == item.id }?.let { level ->
             StockItemEditor(
                 level,
-                onSave = { i, n -> vm.saveStock(i, n); ui.open = null; app.shoku.ui.search.SearchReturn.go() },
-                onDelete = { vm.deleteStock(it); ui.open = null; app.shoku.ui.search.SearchReturn.go() },
+                onSave = { i, n ->
+                    vm.saveStock(i, n); ui.open = null
+                    android.widget.Toast.makeText(context, "${i.name}: stock updated", android.widget.Toast.LENGTH_SHORT).show()
+                    app.shoku.ui.search.SearchReturn.go()
+                },
+                onDelete = {
+                    vm.deleteStock(it); ui.open = null
+                    android.widget.Toast.makeText(context, "${it.name} removed from stock", android.widget.Toast.LENGTH_SHORT).show()
+                    app.shoku.ui.search.SearchReturn.go()
+                },
                 onDismiss = { ui.open = null; app.shoku.ui.search.SearchReturn.go() },
                 onEditFood = item.foodId?.takeIf { lib?.foods?.containsKey(it) == true }?.let { { ui.editFood = item; ui.open = null } },
                 units = item.foodId?.let { stock.units[it] }.orEmpty(),
@@ -140,7 +154,10 @@ fun StockSheets(vm: PlanViewModel, ui: StockUi) {
         SupplementEditor(
             draft, supps, isNew = true,
             initialCount = stock.levels.firstOrNull { it.item.id == item.id }?.qty,
-            onSave = { s, count, on -> vm.foodToSupplement(food, s, count, on); ui.moving = null },
+            onSave = { s, count, on ->
+                vm.foodToSupplement(food, s, count, on); ui.moving = null
+                android.widget.Toast.makeText(context, "${s.name} moved to Supplements", android.widget.Toast.LENGTH_SHORT).show()
+            },
             onDismiss = { ui.moving = null },
         )
     }
