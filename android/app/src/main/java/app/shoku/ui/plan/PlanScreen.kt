@@ -237,10 +237,12 @@ class PlanViewModel(
         sayWorking.value = false
     }
 
-    fun addStock(food: app.shoku.data.db.Food, unit: String, qty: Double) = viewModelScope.launch {
+    fun placeFor(food: app.shoku.data.db.Food) = home.placeFor(food)
+
+    fun addStock(food: app.shoku.data.db.Food, unit: String, qty: Double, place: String? = null) = viewModelScope.launch {
         val l = libraryWith(food.id)
         val amount = l.inFoodUnit(food.id, unit, qty) ?: return@launch
-        home.addFoodStock(food, amount)
+        home.addFoodStock(food, amount, place)
         amountFor.value = null
     }
 
@@ -282,6 +284,18 @@ class PlanViewModel(
     fun deleteTemplate(t: app.shoku.data.db.MealTemplate) = viewModelScope.launch { home.deleteTemplate(t) }
 
     fun toggleToday(s: Supplement, taken: Boolean) = viewModelScope.launch { home.setTaken(s, LocalDate.now(), !taken) }
+
+    /**
+     * Something added as a food that is really a supplement (creatine): saved as a supplement with its count,
+     * its food stock removed and the food archived (Library › Archived brings it back).
+     */
+    fun foodToSupplement(food: app.shoku.data.db.Food, s: Supplement, count: Double?, on: LocalDate) = viewModelScope.launch {
+        home.saveSupplement(s)
+        if (count != null) home.countSupplement(s, count, on)
+        home.deleteFoodStock(food.id)
+        repo.setFoodArchived(food, true)
+        amountFor.value = null
+    }
 
     fun saveSupplement(s: Supplement, newCount: Double?, on: LocalDate = LocalDate.now()) = viewModelScope.launch {
         home.saveSupplement(s)

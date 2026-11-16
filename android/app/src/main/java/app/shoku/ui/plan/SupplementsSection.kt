@@ -147,7 +147,17 @@ private val WEEKDAYS = listOf("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")
 /** Edit dose, slot, schedule, stock count and on/off. Multi-step schedules (D3) are kept unless changed. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SupplementEditor(s: Supplement, st: SupplementState, onSave: (Supplement, Double?, LocalDate) -> Unit, onDismiss: () -> Unit, isNew: Boolean = false, onDelete: ((Supplement) -> Unit)? = null) {
+fun SupplementEditor(
+    s: Supplement,
+    st: SupplementState,
+    onSave: (Supplement, Double?, LocalDate) -> Unit,
+    onDismiss: () -> Unit,
+    isNew: Boolean = false,
+    onDelete: ((Supplement) -> Unit)? = null,
+    /** How many there are, for a new one made from something in stock. */
+    initialCount: Double? = null,
+    header: (@Composable () -> Unit)? = null,
+) {
     var name by remember { mutableStateOf(s.name) }
     var detail by remember { mutableStateOf(s.detail) }
     var unit by remember { mutableStateOf(s.unit) }
@@ -159,7 +169,7 @@ fun SupplementEditor(s: Supplement, st: SupplementState, onSave: (Supplement, Do
     var day by remember { mutableStateOf(single?.day ?: "SUN") }
     var active by remember { mutableStateOf(s.active) }
     val current = supplementStock(st.stockItem(s), st.doses, st.moves)
-    var count by remember { mutableStateOf(current?.let { formatQty(it) } ?: "") }
+    var count by remember { mutableStateOf((current ?: initialCount)?.let { formatQty(Math.round(it * 10) / 10.0) } ?: "") }
     // "I had N on <day>": ticks from that day on are taken off (so a pack opened last week works too).
     var countedOn by remember { mutableStateOf(LocalDate.now()) }
     var pickingDay by remember { mutableStateOf(false) }
@@ -170,6 +180,7 @@ fun SupplementEditor(s: Supplement, st: SupplementState, onSave: (Supplement, Do
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text(if (isNew) "New supplement" else s.name.ifBlank { "Supplement" }, style = MaterialTheme.typography.headlineSmall)
+            header?.invoke()
             LabeledField("Name", name, { name = it }, Modifier.fillMaxWidth(), placeholder = "e.g. Vitamin B12")
             LabeledField("Details (optional)", detail, { detail = it }, Modifier.fillMaxWidth(), placeholder = "e.g. 1500 mcg, brand")
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {

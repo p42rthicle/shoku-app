@@ -121,12 +121,12 @@ class HomeRepository(private val db: ShokuDatabase, scope: CoroutineScope) {
      * Adds [qty] (in the food's own unit) of [food]: a purchase on its existing item, or a new item counted
      * now. Spices become status-only items ("have").
      */
-    suspend fun addFoodStock(food: app.shoku.data.db.Food, qty: Double) = withContext(Dispatchers.IO) {
+    suspend fun addFoodStock(food: app.shoku.data.db.Food, qty: Double, chosenPlace: String? = null) = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
         val existing = home.allStock().firstOrNull { it.foodId == food.id && !it.deleted }
         when {
             existing == null -> {
-                val place = placeFor(food)
+                val place = chosenPlace ?: placeFor(food)
                 val spice = place == StockPlaces.SPICES
                 home.upsertStock(listOf(StockItem(
                     java.util.UUID.randomUUID().toString(), food.name, foodId = food.id, unit = food.unit, place = place,
@@ -147,8 +147,14 @@ class HomeRepository(private val db: ShokuDatabase, scope: CoroutineScope) {
 
     suspend fun deleteStockItem(item: StockItem) = home.upsertStock(listOf(item.copy(deleted = true, updatedAt = System.currentTimeMillis())))
 
+    /** Removes a food's stock rows (it became a supplement). */
+    suspend fun deleteFoodStock(foodId: String) = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        home.upsertStock(home.allStock().filter { it.foodId == foodId && !it.deleted }.map { it.copy(deleted = true, updatedAt = now) })
+    }
+
     /** A first guess at where a food lives; editable. */
-    private fun placeFor(food: app.shoku.data.db.Food): String {
+    fun placeFor(food: app.shoku.data.db.Food): String {
         val n = app.shoku.domain.searchKey("${food.name} ${food.aliases}")
         return when {
             listOf("masala", "powder", "spice", "jeera", "cumin", "haldi", "turmeric", "chilli", "pepper", "salt", "hing", "garam", "seasoning", "marinade").any { it in n } -> StockPlaces.SPICES

@@ -92,6 +92,8 @@ fun QuantitySheet(
     /** Eaten / Planned only makes sense when logging; stock and meal templates hide it. */
     showStatus: Boolean = true,
     initialVariant: String? = null,
+    /** Extra choices under the title (stock: food or supplement, and where it goes). */
+    header: (@Composable () -> Unit)? = null,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var unit by remember { mutableStateOf(initialUnit) }
@@ -141,6 +143,7 @@ fun QuantitySheet(
         ) {
             Text(title, style = MaterialTheme.typography.headlineSmall, color = ShokuColors.Ink)
             if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = ShokuColors.Muted)
+            if (header != null) { Spacer(Modifier.height(14.dp)); header() }
             Spacer(Modifier.height(18.dp))
 
             // Amount

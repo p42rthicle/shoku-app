@@ -262,6 +262,8 @@ fun StockItemEditor(
     onDismiss: () -> Unit,
     /** Units to count in, each with its size in the item's unit (own unit first). */
     units: List<Pair<String, Double>> = emptyList(),
+    /** For a food (creatine added as one): make it a supplement instead. */
+    onMoveToSupplements: (() -> Unit)? = null,
 ) {
     val i = level.item
     val choices = units.ifEmpty { listOf(i.unit to 1.0) }
@@ -333,6 +335,7 @@ fun StockItemEditor(
                 }
             }
             Spacer(Modifier.height(4.dp))
+            if (onMoveToSupplements != null) app.shoku.ui.components.SecondaryButton("It's a supplement: move to Supplements", onClick = onMoveToSupplements)
             PrimaryButton("Save", onClick = {
                 val bb = bestBefore.trim().takeIf { runCatching { LocalDate.parse(it) }.isSuccess }
                 val newCount = count.toAmount()?.times(factor)?.takeIf { tracked && it >= 0 && (level.qty == null || Math.abs(it - level.qty) > 0.05) }

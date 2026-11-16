@@ -1,5 +1,9 @@
 package app.shoku.ui.plan
 
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -14,6 +18,36 @@ class StockUi {
     var searching by mutableStateOf(false)
     var saying by mutableStateOf(false)
     var open by mutableStateOf<StockItem?>(null)
+    /** A food stock item being turned into a supplement. */
+    var moving by mutableStateOf<StockItem?>(null)
+}
+
+/** Words that mark a supplement rather than a food, so "add to stock" starts on Supplement. */
+private val SUPPLEMENT_WORDS = listOf(
+    "creatine", "kreatin", "vitamin", "multivitamin", "omega", "fish oil", "magnesium", "zinc", "iron", "calcium", "b12", "d3",
+    "ashwagandha", "melatonin", "electrolyte", "collagen", "probiotic", "capsule", "tablet", "kapsel", "tablette", "supplement",
+)
+
+fun looksLikeSupplement(food: app.shoku.data.db.Food): Boolean {
+    val n = app.shoku.domain.searchKey("${food.name} ${food.brand.orEmpty()}")
+    return SUPPLEMENT_WORDS.any { Regex("\\b${Regex.escape(it)}\\b").containsMatchIn(n) }
+}
+
+/** A new supplement from a food: name, brand as the detail, dose = its scoop or serving if it has one. */
+private fun supplementFrom(food: app.shoku.data.db.Food, lib: app.shoku.domain.Library, position: Int): app.shoku.data.db.Supplement {
+    val scoop = lib.portionsOf(food).firstOrNull { it.label in setOf("scoop", "serving") }
+    return app.shoku.data.db.Supplement(
+        java.util.UUID.randomUUID().toString(), food.name, detail = food.brand.orEmpty(), unit = food.unit,
+        dose = scoop?.qty ?: 1.0, startDate = java.time.LocalDate.now().toString(), position = position, slot = app.shoku.data.db.Meals.BREAKFAST,
+    )
+}
+
+/** "Food · Supplement" at the top of the add-to-stock sheets. */
+@Composable
+private fun KindSwitch(supplement: Boolean, onChange: (Boolean) -> Unit) {
+    androidx.compose.material3.Text("It's a", style = androidx.compose.material3.MaterialTheme.typography.titleSmall, color = app.shoku.ui.theme.ShokuColors.Muted)
+    androidx.compose.foundation.layout.Spacer(androidx.compose.ui.Modifier.height(6.dp))
+    app.shoku.ui.components.Segmented(listOf("Food", "Supplement"), if (supplement) 1 else 0) { onChange(it == 1) }
 }
 
 /** Scans a pack into stock (library first, then Open Food Facts). */
@@ -29,6 +63,7 @@ fun StockSheets(vm: PlanViewModel, ui: StockUi) {
     val library by vm.library.collectAsState()
     val stock by vm.stockView.collectAsState()
     val amountFor by vm.amountFor.collectAsState()
+    val supps by vm.supplements.collectAsState()
     val sayWorking by vm.sayWorking.collectAsState()
     if (sayWorking) app.shoku.ui.components.BusyOverlay("Working out what you have…", onCancel = vm::cancelSay)
     val lib = library
@@ -45,13 +80,39 @@ fun StockSheets(vm: PlanViewModel, ui: StockUi) {
     }
     amountFor?.let { (food, qty) ->
         if (lib != null && lib.foods.containsKey(food.id)) {
+            var asSupplement by androidx.compose.runtime.remember(food.id) { mutableStateOf(looksLikeSupplement(food)) }
+            var place by androidx.compose.runtime.remember(food.id) { mutableStateOf(vm.placeFor(food)) }
+            if (asSupplement) {
+                val draft = androidx.compose.runtime.remember(food.id) { supplementFrom(food, lib, supps.supplements.size) }
+                SupplementEditor(
+                    draft, supps, isNew = true,
+                    initialCount = lib.portionsOf(food).firstOrNull { it.label == "pack" }?.qty,
+                    header = { KindSwitch(true) { asSupplement = it } },
+                    onSave = { s, count, on -> vm.foodToSupplement(food, s, count, on) },
+                    onDismiss = { vm.amountFor.value = null },
+                )
+                return@let
+            }
             app.shoku.ui.components.QuantitySheet(
+                header = {
+                    KindSwitch(false) { asSupplement = it }
+                    androidx.compose.foundation.layout.Spacer(androidx.compose.ui.Modifier.height(12.dp))
+                    androidx.compose.material3.Text("Where", style = androidx.compose.material3.MaterialTheme.typography.titleSmall, color = app.shoku.ui.theme.ShokuColors.Muted)
+                    androidx.compose.foundation.layout.Spacer(androidx.compose.ui.Modifier.height(6.dp))
+                    androidx.compose.foundation.layout.Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp)) {
+                        app.shoku.data.db.StockPlaces.ALL.dropLast(1).forEach { p ->
+                            androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.clip(androidx.compose.foundation.shape.CircleShape).clickable { place = p }) {
+                                app.shoku.ui.components.StatusChip(p, if (place == p) app.shoku.ui.components.ChipStyle.Filled else app.shoku.ui.components.ChipStyle.Tinted)
+                            }
+                        }
+                    }
+                },
                 title = food.name, subtitle = listOfNotNull(food.brand, "add to stock").joinToString(" · "),
                 units = lib.unitsFor(app.shoku.data.db.RefType.FOOD, food.id), initialUnit = food.unit, initialQty = qty,
                 initialStatus = app.shoku.data.db.EntryStatus.EATEN,
                 nutrientsFor = { u, q -> lib.entryNutrients(app.shoku.data.db.RefType.FOOD, food.id, u, q) },
                 confirmLabel = "Add to stock", showStatus = false,
-                onConfirm = { r -> vm.addStock(food, r.unit, r.qty) },
+                onConfirm = { r -> vm.addStock(food, r.unit, r.qty, place) },
                 onDismiss = { vm.amountFor.value = null },
             )
         }
@@ -61,7 +122,20 @@ fun StockSheets(vm: PlanViewModel, ui: StockUi) {
             StockItemEditor(
                 level, onSave = { i, n -> vm.saveStock(i, n); ui.open = null }, onDelete = { vm.deleteStock(it); ui.open = null }, onDismiss = { ui.open = null },
                 units = item.foodId?.let { stock.units[it] }.orEmpty(),
+                onMoveToSupplements = item.foodId?.takeIf { lib?.foods?.containsKey(it) == true }?.let { { ui.moving = item; ui.open = null } },
             )
         }
+    }
+    // A food already in stock that is really a supplement: same editor, counted from what's there now.
+    ui.moving?.let { item ->
+        val food = item.foodId?.let { lib?.foods?.get(it) }
+        if (food == null || lib == null) { ui.moving = null; return@let }
+        val draft = androidx.compose.runtime.remember(item.id) { supplementFrom(food, lib, supps.supplements.size) }
+        SupplementEditor(
+            draft, supps, isNew = true,
+            initialCount = stock.levels.firstOrNull { it.item.id == item.id }?.qty,
+            onSave = { s, count, on -> vm.foodToSupplement(food, s, count, on); ui.moving = null },
+            onDismiss = { ui.moving = null },
+        )
     }
 }
