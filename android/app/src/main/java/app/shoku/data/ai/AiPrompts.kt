@@ -5,6 +5,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.doubleOrNull
@@ -84,6 +85,14 @@ private val ITEM = obj(
 )
 
 val MEAL_RESULT = obj("items" to arr(ITEM), "meal" to nullable(typed("string", enum = MEALS)))
+
+val PLATE_RESULT = obj(
+    "items" to arr(ITEM), "meal" to nullable(typed("string", enum = MEALS)),
+    "setting" to typed("string", "home: on their home dishes (like the reference photos or their dish notes) or clearly home-cooked; outside: takeaway box, foil, paper, a restaurant or canteen plate, packaging; unclear otherwise", listOf("home", "outside", "unclear")),
+    "dishware" to nullable(typed("string", "The plate, bowls, glass and cutlery in a few words (colour, material, shape), e.g. grey matte plate with dark rim, orange bowl, steel spoon")),
+)
+
+const val REFS_INTRO = "Photos of earlier meals at their home, to recognise their own plates, bowls and cutlery (not this meal):"
 
 val LABEL_RESULT = obj(
     "readable" to typed("boolean", "False if no nutrition table can be read"),
@@ -254,7 +263,13 @@ object DirectRoutes {
         val angles = if (photos.size > 1) {
             " There are ${photos.size} photos of the same meal from different angles: use them together to judge depth and portion size, and count each food once."
         } else ""
-        return ask(PLATE_TASK + angles + extra, body["library"], photos + hints(body) + UserBlock.Text("What is here and how much?"), MEAL_RESULT, model = PHOTO_MODEL)
+        return ask(PLATE_TASK + angles + extra, body["library"], refs(body) + photos + hints(body) + UserBlock.Text("What is here and how much?"), PLATE_RESULT, model = PHOTO_MODEL)
+    }
+
+    /** Earlier photos of their home dishes (up to 3), as ai.js's refsBlocks. */
+    private fun refs(body: JsonObject): List<UserBlock> {
+        val list = (body["refs"] as? JsonArray).orEmpty().filter { (it as? JsonPrimitive)?.isString == true && it.jsonPrimitive.content.isNotEmpty() }.take(3)
+        return if (list.isEmpty()) emptyList() else listOf<UserBlock>(UserBlock.Text(REFS_INTRO)) + list.map { imageBlock(it, "image/jpeg") }
     }
 
     private fun recipe(body: JsonObject) = ask(

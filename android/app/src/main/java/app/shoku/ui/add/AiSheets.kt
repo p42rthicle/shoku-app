@@ -168,6 +168,9 @@ fun AiReviewSheet(
     onDraft: ((List<ResolvedItem>) -> Unit)? = null,
     /** Logging a future day saves as planned: the button says so. */
     asPlanned: Boolean = false,
+    /** Photos: where it was eaten ("home" / "outside"), tappable; At home teaches it your dishes. */
+    place: String? = null,
+    onPlace: (String) -> Unit = {},
 ) {
     val items = remember(initial) { mutableStateListOf<ResolvedItem>().apply { addAll(initial) } }
     val included = remember(initial) { mutableStateListOf<Boolean>().apply { initial.forEach { add(true) } } }
@@ -183,6 +186,15 @@ fun AiReviewSheet(
     ) {
         Column(Modifier.padding(horizontal = 20.dp).navigationBarsPadding().padding(bottom = 16.dp)) {
             Text(title, style = MaterialTheme.typography.headlineSmall)
+            if (place != null) {
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("home" to "At home", "outside" to "Eaten out").forEach { (key, label) ->
+                        Box(Modifier.clip(CircleShape).clickable { onPlace(key) }) { app.shoku.ui.components.StatusChip(label, if (place == key) app.shoku.ui.components.ChipStyle.Filled else app.shoku.ui.components.ChipStyle.Tinted) }
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+            }
             Text(
                 if (items.isEmpty()) "Nothing recognisable came back. Try describing it differently."
                 else "Tap an item to change the amount. ~ means estimated.",

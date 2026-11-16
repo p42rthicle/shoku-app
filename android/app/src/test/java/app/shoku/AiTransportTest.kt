@@ -11,6 +11,7 @@ import app.shoku.data.ai.DirectTransport
 import app.shoku.data.ai.LABEL_TASK
 import app.shoku.data.ai.PRODUCT_TASK
 import app.shoku.data.ai.HINTS_INTRO
+import app.shoku.data.ai.REFS_INTRO
 import app.shoku.data.ai.MEAL_TASK_TEXT
 import app.shoku.data.ai.MemoryStore
 import app.shoku.data.ai.PHOTO_MODEL
@@ -195,7 +196,7 @@ class AiTransportTest {
         val file = File("../../backend/functions/api/ai.js")
         assumeTrue(file.isFile)
         val js = file.readText()
-        listOf(RULES, UNITS_TASK, PLAN_TASK, MEAL_TASK_TEXT, LABEL_TASK, PRODUCT_TASK, HINTS_INTRO, PLATE_TASK, RECIPE_TASK, mealTask("\${meal}")).forEach {
+        listOf(RULES, UNITS_TASK, PLAN_TASK, MEAL_TASK_TEXT, LABEL_TASK, PRODUCT_TASK, HINTS_INTRO, REFS_INTRO, PLATE_TASK, RECIPE_TASK, mealTask("\${meal}")).forEach {
             assertTrue("not in ai.js: ${it.take(60)}", it in js)
         }
     }

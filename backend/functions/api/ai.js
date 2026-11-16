@@ -91,6 +91,18 @@ const MEAL_RESULT = {
 	},
 };
 
+const PLATE_RESULT = {
+	type: 'object',
+	additionalProperties: false,
+	required: ['items', 'meal', 'setting', 'dishware'],
+	properties: {
+		items: { type: 'array', items: ITEM },
+		meal: nullable({ type: 'string', enum: ['Breakfast', 'Lunch', 'Snacks', 'Dinner'] }),
+		setting: { type: 'string', enum: ['home', 'outside', 'unclear'], description: 'home: on their home dishes (like the reference photos or their dish notes) or clearly home-cooked; outside: takeaway box, foil, paper, a restaurant or canteen plate, packaging; unclear otherwise' },
+		dishware: nullable({ type: 'string', description: 'The plate, bowls, glass and cutlery in a few words (colour, material, shape), e.g. grey matte plate with dark rim, orange bowl, steel spoon' }),
+	},
+};
+
 const LABEL_RESULT = {
 	type: 'object',
 	additionalProperties: false,
@@ -243,6 +255,12 @@ async function readProduct(apiKey, body) {
 	});
 }
 
+/** Earlier photos of their home dishes (body.refs, up to 3), introduced so they're not taken for this meal. */
+function refsBlocks(body) {
+	const refs = Array.isArray(body.refs) ? body.refs.filter((r) => typeof r === 'string' && r).slice(0, 3) : [];
+	return refs.length ? [{ type: 'text', text: 'Photos of earlier meals at their home, to recognise their own plates, bowls and cutlery (not this meal):' }, ...refs.map((r) => imageBlock(r, 'image/jpeg'))] : [];
+}
+
 async function plate(apiKey, body) {
 	const photos = images(body);
 	const extra = typeof body.text === 'string' && body.text.trim() ? `\nThey add: ${body.text.slice(0, 500)}` : '';
@@ -252,8 +270,8 @@ async function plate(apiKey, body) {
 	return ask(apiKey, {
 		task: 'Task: estimate what is on this plate or in this bowl. List each visible food with a realistic amount; use the plate, cutlery, glasses and bowls for scale. Match to their library when it is clearly the same dish (e.g. their own dal or rice batch). Confidence is at most medium for anything judged by eye.' + angles + extra,
 		library: body.library,
-		content: [...photos, ...hintsBlock(body), { type: 'text', text: 'What is here and how much?' }],
-		schema: MEAL_RESULT,
+		content: [...refsBlocks(body), ...photos, ...hintsBlock(body), { type: 'text', text: 'What is here and how much?' }],
+		schema: PLATE_RESULT,
 		model: MODEL,
 	});
 }

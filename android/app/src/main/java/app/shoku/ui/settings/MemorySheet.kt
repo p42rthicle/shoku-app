@@ -89,7 +89,7 @@ fun MemorySheet(onDismiss: () -> Unit) {
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Text(m.line, style = MaterialTheme.typography.bodyLarge)
                                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    StatusChip(if (m.kind == AiMemory.FIX) "Correction" else "Match", if (m.kind == AiMemory.FIX) ChipStyle.Filled else ChipStyle.Tinted)
+                                    StatusChip(when (m.kind) { AiMemory.FIX -> "Correction"; AiMemory.DISH -> "Home dishes"; else -> "Match" }, if (m.kind == AiMemory.FIX) ChipStyle.Filled else ChipStyle.Tinted)
                                     val day = Instant.ofEpochMilli(m.at).atZone(ZoneId.systemDefault()).toLocalDate()
                                     Text(
                                         listOfNotNull(m.meal?.lowercase(), if (m.count > 1) "seen ${m.count}×" else null,
@@ -100,7 +100,10 @@ fun MemorySheet(onDismiss: () -> Unit) {
                             }
                             Spacer(Modifier.width(8.dp))
                             Icon(Icons.Rounded.Close, "Forget this", tint = ShokuColors.Muted,
-                                modifier = Modifier.clip(CircleShape).clickable { AiMemory.forget(m.key); lastForgotten = m; reload() }.padding(8.dp).size(20.dp))
+                                modifier = Modifier.clip(CircleShape).clickable {
+                                    AiMemory.forget(m.key); lastForgotten = m; reload()
+                                    if (m.kind == AiMemory.DISH) app.shoku.data.PhotoStore.removeHomeRef(m.line.removePrefix("Home dishes: "))
+                                }.padding(8.dp).size(20.dp))
                         }
                     }
                 }

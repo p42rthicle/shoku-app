@@ -498,6 +498,9 @@ class AddViewModel(
     private var pendingPhotos: List<String> = emptyList()
     /** What the AI proposed in that review, to learn from what was changed before logging. */
     private var proposed: List<ResolvedItem> = emptyList()
+    /** Photos: where it was eaten (the review's At home / Eaten out) and the dishware the AI saw. */
+    val place = MutableStateFlow<String?>(null)
+    private var dishware: String? = null
 
     private fun aiFailure(e: Throwable): AiState = if (e is kotlinx.coroutines.CancellationException) AiState.Idle else AiState.Failed(
         when (e) {
@@ -514,6 +517,7 @@ class AddViewModel(
         runCatching {
             val lib = currentLibrary()
             val keys = aiClient.libraryKeys(lib, extra = aiClient.referenceCandidates(text, reference, lib))
+            place.value = null
             val result = aiClient.meal(text, keys, memoryHints(lib, text))
             AiState.Review("Check before logging", aiClient.resolve(result.items, keys, lib, byEye = false).also { proposed = it; pendingPhotos = emptyList() })
         }.onSuccess { ai.value = it }.onFailure { ai.value = aiFailure(it) }
@@ -525,10 +529,14 @@ class AddViewModel(
         runCatching {
             val lib = currentLibrary()
             val keys = aiClient.libraryKeys(lib, extra = note?.let { aiClient.referenceCandidates(it, reference, lib) }.orEmpty())
-            val result = aiClient.plate(photos, note?.takeIf { it.isNotBlank() }, keys, memoryHints(lib, note))
-            AiState.Review("Estimated from the photo", aiClient.resolve(result.items, keys, lib, byEye = true).also {
-                proposed = it
-                pendingPhotos = if (app.shoku.data.PhotoStore.saveWithMeal) photos else emptyList()
+            val refs = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { app.shoku.data.PhotoStore.homeRefsBase64() }
+            val result = aiClient.plate(photos, note?.takeIf { it.isNotBlank() }, keys, memoryHints(lib, note), refs)
+            AiState.Review("Estimated from the photo", aiClient.resolve(result.items, keys, lib, byEye = true).also { items ->
+                proposed = items
+                pendingPhotos = photos
+                dishware = result.dishware?.trim()?.takeIf { it.isNotEmpty() }
+                // A fridge batch on the plate means home; otherwise what the AI saw (unclear counts as home).
+                place.value = if (items.any { it.refType == RefType.BATCH } || result.setting != "outside") "home" else "outside"
             })
         }.onSuccess { ai.value = it }.onFailure { ai.value = aiFailure(it) }
     }
@@ -561,17 +569,25 @@ class AddViewModel(
             .onFailure { ai.value = aiFailure(it) }
     }
 
-    fun clearAi() { ai.value = AiState.Idle; pendingPhotos = emptyList() }
+    fun clearAi() { ai.value = AiState.Idle; pendingPhotos = emptyList(); place.value = null }
 
     /** Logs the reviewed items as one group, so a single undo removes them all. */
     fun logAi(items: List<ResolvedItem>, status: String) = viewModelScope.launch {
         val now = System.currentTimeMillis()
         // Learn from what was changed in the review; keep the plate photos with what was logged.
         app.shoku.data.ai.AiMemory.learnFromReview(proposed, items, meal.value)
-        val photoNames = pendingPhotos.takeIf { it.isNotEmpty() }?.let { ps ->
-            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { ps.map { app.shoku.data.PhotoStore.save(it) } }.joinToString(",")
+        val where = place.value
+        // Photos are kept with the meal when "Save photo with the meal" is on; a meal at home also keeps its first
+        // photo as a reference for that kind of dishware (even with saving off).
+        val keepWithMeal = app.shoku.data.PhotoStore.saveWithMeal
+        val saved = if (pendingPhotos.isEmpty() || (!keepWithMeal && where != "home")) emptyList()
+            else kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { (if (keepWithMeal) pendingPhotos else pendingPhotos.take(1)).map { app.shoku.data.PhotoStore.save(it) } }
+        val photoNames = if (keepWithMeal) saved.joinToString(",").ifEmpty { null } else null
+        if (where == "home") dishware?.let { d ->
+            app.shoku.data.ai.AiMemory.learnHomeDishes(d)
+            saved.firstOrNull()?.let { app.shoku.data.PhotoStore.addHomeRef(it, d) }
         }
-        pendingPhotos = emptyList(); proposed = emptyList()
+        pendingPhotos = emptyList(); proposed = emptyList(); dishware = null
         val entries = items.mapIndexed { i, it ->
             // Reference dishes become library foods (with their serving portion) on first use; something the
             // AI only estimated becomes a library food too, so it's a normal match next time.
@@ -587,6 +603,7 @@ class AddViewModel(
                 // A brand on something matched to a generic ("Yadav" chakli) is kept as the entry's brand note.
                 variant = it.brand?.takeIf { _ -> it.refType != RefType.QUICK },
                 photos = photoNames,
+                note = if (where == "outside") "Eaten out" else null,
             )
         }
         entries.forEach { repo.add(it) }

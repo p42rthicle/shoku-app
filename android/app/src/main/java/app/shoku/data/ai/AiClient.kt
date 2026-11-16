@@ -42,7 +42,13 @@ data class AiItem(
     val brand: String? = null,
 )
 
-@Serializable data class AiMealResult(val items: List<AiItem>, val meal: String? = null)
+@Serializable data class AiMealResult(
+    val items: List<AiItem>,
+    val meal: String? = null,
+    /** Photos only: "home", "outside" or "unclear", and the dishware in a few words. */
+    val setting: String? = null,
+    val dishware: String? = null,
+)
 @Serializable data class AiRecipeResult(val name: String? = null, val servings: Double? = null, val ingredients: List<AiItem>)
 
 /** A photo of any side of a pack: what the product is, with values read from it or typical ones. */
@@ -82,7 +88,7 @@ data class AiLabelResult(
 @Serializable private data class CapBody(val usd: Double)
 @Serializable private data class TextBody(val text: String, val library: List<LibItem>? = null, val hints: List<String>? = null)
 @Serializable private data class ImageBody(val image: String, val mediaType: String = "image/jpeg", val text: String? = null, val library: List<LibItem>? = null)
-@Serializable private data class ImagesBody(val images: List<String>, val mediaType: String = "image/jpeg", val text: String? = null, val library: List<LibItem>? = null, val hints: List<String>? = null)
+@Serializable private data class ImagesBody(val images: List<String>, val mediaType: String = "image/jpeg", val text: String? = null, val library: List<LibItem>? = null, val hints: List<String>? = null, val refs: List<String>? = null)
 
 /** What an AI item resolves to in this app. */
 data class ResolvedItem(
@@ -170,8 +176,9 @@ class AiClient {
         call("/ai/meal", json.encodeToString(TextBody.serializer(), TextBody(text, keys.items, hints.ifEmpty { null })), AiMealResult.serializer())
 
     /** One to four photos of the same meal; several angles help the portion estimate. */
-    suspend fun plate(jpegsBase64: List<String>, note: String?, keys: LibraryKeys, hints: List<String> = emptyList()): AiMealResult =
-        call("/ai/plate", json.encodeToString(ImagesBody.serializer(), ImagesBody(jpegsBase64.take(4), text = note, library = keys.items, hints = hints.ifEmpty { null })), AiMealResult.serializer())
+    /** [refs]: earlier photos of their home dishes (PhotoStore.homeRefs), to tell home food from food outside. */
+    suspend fun plate(jpegsBase64: List<String>, note: String?, keys: LibraryKeys, hints: List<String> = emptyList(), refs: List<String> = emptyList()): AiMealResult =
+        call("/ai/plate", json.encodeToString(ImagesBody.serializer(), ImagesBody(jpegsBase64.take(4), text = note, library = keys.items, hints = hints.ifEmpty { null }, refs = refs.take(3).ifEmpty { null })), AiMealResult.serializer())
 
     /** One to four photos of the same pack (front for the name, back for the nutrition table). */
     suspend fun product(jpegsBase64: List<String>): AiProductResult =

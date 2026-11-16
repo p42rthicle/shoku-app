@@ -124,4 +124,39 @@ class PhotosAndMemoryTest {
         assertTrue(AiMemory.all().isEmpty())
         assertTrue(AiMemory.hints(emptyList(), "rice", "Dinner").isEmpty())
     }
+
+    @Test fun aLaterEditReplacesTheMatch() {
+        fresh()
+        // Kept at 200 g in the review (a match), then changed to 1 serving on Today.
+        AiMemory.learnFromReview(listOf(item("Crushed Gobhi Soya Paneer", "g1", 200.0, "bowl of gobhi sabzi")), listOf(item("Crushed Gobhi Soya Paneer", "g1", 200.0, "bowl of gobhi sabzi")), "Dinner")
+        assertEquals(1, AiMemory.all().count { it.kind == AiMemory.MATCH })
+        val e = LogEntry("e", "2026-11-16", "Dinner", "batch", "g1", "Crushed Gobhi Soya Paneer", "g", 200.0, 386.0, 30.0, null, source = "ai")
+        AiMemory.learnFromEdit(e, e.copy(unit = "serving", qty = 1.0))
+        assertTrue(AiMemory.all().none { it.kind == AiMemory.MATCH })
+        assertEquals("Crushed Gobhi Soya Paneer: 1 serving, not 200 g", AiMemory.all().single().line)
+    }
+
+    @Test fun homeDishesAndReferencePhotos() {
+        fresh()
+        app.shoku.data.PhotoStore.init(context)
+        context.getSharedPreferences("photos", 0).edit().clear().commit()
+        AiMemory.learnHomeDishes("grey matte plate with dark rim, steel spoon")
+        AiMemory.learnHomeDishes("grey matte plate with a dark rim and steel fork") // the same plate: strengthens
+        AiMemory.learnHomeDishes("colourful ceramic plate with flowers")
+        val dishes = AiMemory.all().filter { it.kind == AiMemory.DISH }
+        assertEquals(2, dishes.size)
+        assertEquals(2, dishes.maxOf { it.count })
+        val hints = AiMemory.hints(emptyList(), query = null, meal = "Dinner")
+        assertTrue(hints.first().startsWith("Their home dishes: ") && "colourful ceramic plate" in hints.first())
+
+        // Reference photos: one per kind of dishware, newest wins, at most 3.
+        val jpeg = android.util.Base64.encodeToString(ByteArray(10) { it.toByte() }, android.util.Base64.NO_WRAP)
+        fun ref(d: String) = app.shoku.data.PhotoStore.addHomeRef(app.shoku.data.PhotoStore.save(jpeg), d)
+        ref("grey matte plate with dark rim"); ref("grey matte plate, dark rim, steel spoon"); ref("colourful plate with flowers")
+        assertEquals(2, app.shoku.data.PhotoStore.homeRefs().size)
+        ref("white ceramic bowl"); ref("black slate board")
+        assertEquals(3, app.shoku.data.PhotoStore.homeRefs().size)
+        app.shoku.data.PhotoStore.removeHomeRef("black slate board")
+        assertTrue(app.shoku.data.PhotoStore.homeRefs().none { it.second == "black slate board" })
+    }
 }

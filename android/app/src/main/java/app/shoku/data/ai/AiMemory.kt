@@ -36,6 +36,8 @@ object AiMemory {
 
     const val FIX = "fix"
     const val MATCH = "match"
+    /** What their home plates, bowls and cutlery look like (learned from photos tagged At home). */
+    const val DISH = "dish"
     private const val KEEP = 500
 
     private lateinit var app: Context
@@ -111,12 +113,23 @@ object AiMemory {
         }
     }
 
+    /** A photo logged as At home: remember its dishware ("grey matte plate with dark rim, steel spoon"). */
+    fun learnHomeDishes(dishware: String) {
+        if (!ready || dishware.isBlank()) return
+        val w = words(dishware)
+        // A description much like one already kept strengthens it instead of adding another.
+        val same = all().firstOrNull { it.kind == DISH && (it.words.toSet() intersect w.toSet()).size * 2 >= minOf(it.words.size, w.size).coerceAtLeast(1) }
+        remember(Memory(same?.key ?: "dish|${w.sorted()}", w, "Home dishes: ${dishware.trim()}", DISH))
+    }
+
     /** An entry the AI made, changed later on Today. */
     fun learnFromEdit(old: LogEntry, new: LogEntry) {
         if (!ready || old.source != "ai") return
         val sameFood = old.refType == new.refType && old.refId == new.refId
         val sameAmount = old.unit == new.unit && Math.abs(old.qty - new.qty) < 1e-6
         if (sameFood && sameAmount) return
+        // A match kept in the review ("… is their Gobhi (200 g)") is out of date once the entry is corrected.
+        old.refId?.let { id -> save(all().filter { !(it.kind == MATCH && it.key.endsWith("|$id")) }) }
         remember(
             if (sameFood) Memory("amount|${new.refId ?: new.name}|${new.meal}", words(new.name), "${new.name}: ${amount(new.qty, new.unit)}, not ${amount(old.qty, old.unit)}", FIX, new.meal)
             else Memory("food|${words(old.name).sorted()}|${new.refId ?: new.name}", words(old.name, new.name),
@@ -130,7 +143,11 @@ object AiMemory {
      */
     fun hints(logs: List<LogEntry>, query: String? = null, meal: String? = null, fridge: List<String> = emptyList(), today: LocalDate = LocalDate.now(), now: Long = System.currentTimeMillis()): List<String> {
         val q = words(query).toSet()
-        val picked = all().map { m ->
+        val mem = all()
+        // Their home dishware always goes along: food on these is home food, usually from the fridge.
+        val dishes = mem.filter { it.kind == DISH }.sortedByDescending { it.count }.take(6).map { it.line.removePrefix("Home dishes: ") }
+        val dishLine = if (dishes.isEmpty()) emptyList() else listOf("Their home dishes: ${dishes.joinToString("; ")}. Food on these is home food, usually from their fridge batches and usual home portions; a takeaway box, foil or a restaurant plate means food from outside.")
+        val picked = mem.filter { it.kind != DISH }.map { m ->
             val overlap = m.words.count { it in q }
             val days = (now - m.at) / 86_400_000.0
             val score = 3.0 * overlap +
@@ -155,6 +172,6 @@ object AiMemory {
                 (if (meal != null) "At ${meal.lowercase()}: " else "") + "$name, usually ${amount(qty, unit)} (${list.size}× in 2 months)"
             }
         val inFridge = if (fridge.isEmpty()) emptyList() else listOf("Cooked and in their fridge now (likely on the plate): ${fridge.joinToString(", ")}")
-        return picked + inFridge + usual
+        return dishLine + picked + inFridge + usual
     }
 }

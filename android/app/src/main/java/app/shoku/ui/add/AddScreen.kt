@@ -108,6 +108,7 @@ fun AddScreen(
     val added by vm.added.collectAsState()
     val scan by vm.scan.collectAsState()
     val aiState by vm.ai.collectAsState()
+    val place by vm.place.collectAsState()
     val online by vm.online.collectAsState()
     var describing by remember { mutableStateOf(startDescribing) }
     var labelBarcode by remember { mutableStateOf<String?>(null) }
@@ -390,6 +391,8 @@ fun AddScreen(
             onDraft = { items -> vm.logAi(items, app.shoku.data.db.EntryStatus.PLANNED); announce("Saved ${items.size} as a draft on Today") },
             asPlanned = defaultStatus == app.shoku.data.db.EntryStatus.PLANNED,
             onDismiss = { vm.clearAi() },
+            place = place,
+            onPlace = { vm.place.value = it },
         )
     }
 

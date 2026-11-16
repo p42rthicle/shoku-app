@@ -25,6 +25,15 @@ data class Release(val version: String, val date: String, val changes: List<Stri
  */
 val CHANGELOG = listOf(
     Release(
+        "0.9.43", "16 Nov 2026",
+        listOf(
+            "Photo logs have a place tag, At home or Eaten out: At home when your fridge batches are on the plate (or the dishes look like yours), Eaten out for a takeaway box or restaurant plate; one tap changes it",
+            "Shoku AI learns your home dishes: each At home photo teaches what your plates, bowls and cutlery look like, and keeps a reference photo per kind of dish (up to 3); later photos on those dishes count as home food, from your fridge first",
+            "Eaten out photos note it on the entries",
+            "Correcting an entry on Today replaces the AI's earlier match for it (no more 200 g next to 1 serving)",
+        ),
+    ),
+    Release(
         "0.9.42", "16 Nov 2026",
         listOf(
             "Settings › What Shoku AI has learned: every correction and match it remembers, how often and when; forget one (with Bring back) or everything",
