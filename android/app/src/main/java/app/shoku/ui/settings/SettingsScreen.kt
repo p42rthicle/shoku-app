@@ -1,5 +1,6 @@
 package app.shoku.ui.settings
 
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -106,6 +107,8 @@ fun SettingsScreen(
     val sync by vm.sync.status.collectAsState()
     var editingGoal by remember { mutableStateOf(false) }
 
+    var showDuplicates by remember { mutableStateOf(false) }
+    if (showDuplicates) DuplicatesSheet(onDismiss = { showDuplicates = false })
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
@@ -208,6 +211,9 @@ fun SettingsScreen(
                     Count("Entries", s.entries, Modifier.weight(1f))
                 }
                 Spacer(Modifier.height(16.dp))
+                // One entry for each product: find foods that are in the library twice and merge them.
+                SecondaryButton("Find duplicate foods", onClick = { showDuplicates = true }, icon = Icons.Outlined.ContentCopy)
+                Spacer(Modifier.height(10.dp))
                 SecondaryButton("Export backup ZIP", onClick = onExport, icon = Icons.Outlined.FileDownload)
                 Spacer(Modifier.height(10.dp))
                 Text(

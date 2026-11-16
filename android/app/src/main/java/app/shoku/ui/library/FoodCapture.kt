@@ -1,6 +1,28 @@
 package app.shoku.ui.library
 
 import android.widget.Toast
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.unit.dp
+import app.shoku.ui.components.ChipStyle
+import app.shoku.ui.components.StatusChip
+import app.shoku.ui.theme.ShokuColors
+import app.shoku.ui.theme.ShokuShapes
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -10,6 +32,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import app.shoku.ShokuApplication
 import app.shoku.ui.add.PackSheet
+import app.shoku.domain.Duplicates
+import app.shoku.data.db.RefType
 import app.shoku.data.BarcodeResult
 import app.shoku.data.FoodDraft
 import app.shoku.data.FoodLookup
@@ -37,8 +61,18 @@ fun NewFoodEditor(
     onSave: (Food, List<FoodPortion>) -> Unit,
     onDismiss: () -> Unit,
     onPackPhoto: ((String?) -> Unit)? = null,
+    /** Picked "Use this" on a food the library already has. */
+    onUseExisting: ((Food) -> Unit)? = null,
 ) {
     val pending = remember(draft) { mutableStateOf<List<FoodPortion>>(emptyList()) }
+    // Is it already in the library? (A scan of the wraps you have under another name.)
+    val shoku = LocalContext.current.applicationContext as ShokuApplication
+    val library by shoku.repository.library.collectAsState(initial = null)
+    val logs by shoku.repository.allEntries.collectAsState(initial = emptyList())
+    val matches = remember(draft, library, logs.size) {
+        library?.let { Duplicates.matches(it, draft.prefill, logs).take(2) }.orEmpty()
+    }
+    val uses = remember(logs.size) { logs.filter { !it.deleted && it.refType == RefType.FOOD }.groupingBy { it.refId }.eachCount() }
     val barcode = draft.prefill.barcode
     FoodEditor(
         food = null,
@@ -60,6 +94,28 @@ fun NewFoodEditor(
             barcode != null -> draft.note ?: "Barcode $barcode isn't in Open Food Facts. Take a photo of the label, or type the values (per 100 g or 100 ml)."
             else -> "Type the values per 100 g (or 100 ml, 1 pc), or read them from the label."
         },
+        header = if (matches.isEmpty() || onUseExisting == null) null else { {
+            Column(
+                Modifier.fillMaxWidth().clip(ShokuShapes.Card).background(ShokuColors.Tint).padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text("Already in your library?", style = MaterialTheme.typography.titleMedium)
+                matches.forEach { f ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(f.name + (f.brand?.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""), style = MaterialTheme.typography.bodyLarge)
+                            val n = uses[f.id] ?: 0
+                            Text(listOfNotNull(if (n > 0) "logged $n×" else "not logged yet", if (!f.barcode.isNullOrBlank() && f.barcode == barcode) "same barcode" else null, if (f.archived) "archived" else null).joinToString(" · "),
+                                style = MaterialTheme.typography.bodySmall, color = ShokuColors.Muted)
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Box(Modifier.clip(CircleShape).clickable { onUseExisting(f) }) { StatusChip("Use this", ChipStyle.Filled) }
+                    }
+                }
+                Text(if (barcode != null) "Using it adds this barcode to it, so the next scan finds it." else "Or save this as a new food below.",
+                    style = MaterialTheme.typography.bodySmall, color = ShokuColors.Muted)
+            }
+        } },
         extraActions = if (draft.found) emptyList() else listOfNotNull(
             onReadLabel?.let { f -> "Read the label with a photo" to { f(barcode) } },
             onPackPhoto?.let { f -> "No label? Take a photo of the pack" to { f(barcode) } },
@@ -154,6 +210,7 @@ fun rememberFoodCapture(onFood: (Food) -> Unit): FoodCapture {
             d,
             onReadLabel = ::readLabel,
             onPackPhoto = ::packPhoto,
+            onUseExisting = { f -> val d0 = d; draft = null; scope.launch { onFood(FoodLookup.useExisting(app.repository, f, d0)) } },
             onSave = { food, portions ->
                 draft = null
                 scope.launch { FoodLookup.save(app.repository, food, portions); onFood(food) }

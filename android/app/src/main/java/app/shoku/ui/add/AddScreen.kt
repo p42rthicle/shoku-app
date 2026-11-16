@@ -158,6 +158,38 @@ fun AddScreen(
         if (r == SnackbarResult.ActionPerformed) vm.undoLast()
     }
 
+    // "Did you mean yours?": a database or online pick that you already have (and log) under your own name.
+    var didYouMean by remember { mutableStateOf<Triple<Suggestion, Pair<Suggestion, Int>, Boolean>?>(null) }
+    fun quickAdd(s: Suggestion) { vm.add(s, s.unit, s.qty, defaultStatus); announce("Added ${s.name}") }
+    fun checkOwn(s: Suggestion, quick: Boolean) {
+        val own = vm.ownVersion(s)
+        when {
+            own != null -> didYouMean = Triple(s, own, quick)
+            quick -> quickAdd(s)
+            else -> sheetFor = s
+        }
+    }
+    didYouMean?.let { (picked, own, quick) ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { didYouMean = null },
+            containerColor = ShokuColors.Paper,
+            title = { Text("Did you mean yours?") },
+            text = {
+                Text(
+                    "You picked ${picked.name}${if (picked.reference != null) " from the food databases" else " (online)"}. " +
+                        "You have ${own.first.name}" + (if (own.second > 0) ", logged ${own.second}× before." else " in your library.") + " Log yours instead?",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = { didYouMean = null; if (quick) quickAdd(own.first) else sheetFor = own.first }) { Text("Use mine", color = ShokuColors.Ink) }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { didYouMean = null; if (quick) quickAdd(picked) else sheetFor = picked }) { Text("No, this one", color = ShokuColors.Muted) }
+            },
+        )
+    }
+
     Column(
         Modifier
             .fillMaxSize()
@@ -293,7 +325,7 @@ fun AddScreen(
                 if (state.results.size > 8) item(key = "results-more") { app.shoku.ui.components.SeeMoreChip(state.results.size, 8, showAllResults, { showAllResults = !showAllResults }) }
                 if (state.references.isNotEmpty()) {
                     item(key = "ref-label") { SectionLabel("From food databases", trailing = "typical values") }
-                    item(key = "refs") { SuggestionCard(state.references.shown(showAllRefs, 4), onOpen = { focus.clearFocus(); sheetFor = it }, onQuickAdd = { s -> vm.add(s, s.unit, s.qty, defaultStatus); announce("Added ${s.name}") }) }
+                    item(key = "refs") { SuggestionCard(state.references.shown(showAllRefs, 4), onOpen = { focus.clearFocus(); checkOwn(it, false) }, onQuickAdd = { s -> checkOwn(s, true) }) }
                     if (state.references.size > 4) item(key = "refs-more") { app.shoku.ui.components.SeeMoreChip(state.references.size, 4, showAllRefs, { showAllRefs = !showAllRefs }) }
                 }
                 if (online.failed && online.items.isEmpty()) item(key = "online-failed") {
@@ -305,7 +337,7 @@ fun AddScreen(
                     }
                 }
                 if (online.items.isNotEmpty()) {
-                    item(key = "online") { SuggestionCard(online.items, onOpen = { focus.clearFocus(); sheetFor = it }, onQuickAdd = { s -> vm.add(s, s.unit, s.qty, defaultStatus); announce("Added ${s.name}") }) }
+                    item(key = "online") { SuggestionCard(online.items, onOpen = { focus.clearFocus(); checkOwn(it, false) }, onQuickAdd = { s -> checkOwn(s, true) }) }
                 }
                 // Not there at all: make it.
                 item(key = "make") {
@@ -381,6 +413,7 @@ private fun ScanEditor(vm: AddViewModel, scan: ScanState, onReadLabel: (String?)
         onSave = { food, portions -> vm.saveScanned(food, portions) },
         onDismiss = { vm.clearScan() },
         onPackPhoto = { b -> vm.clearScan(); onPackPhoto(b) },
+        onUseExisting = { f -> vm.useExisting(f, st.draft) },
     )
 }
 

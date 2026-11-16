@@ -111,6 +111,24 @@ object FoodLookup {
             if (name.isBlank()) emptyList() else library.suggestFamilies(name), found = false,
         )
 
+    /**
+     * "Already in your library": use [existing] instead of a new food. A scanned barcode (and a brand or
+     * missing values) are added to it, so the next scan finds it straight away.
+     */
+    suspend fun useExisting(repo: ShokuRepository, existing: Food, draft: FoodDraft): Food {
+        val p = draft.prefill
+        val sameBasis = p.unit == existing.unit && p.baseQty == existing.baseQty
+        val updated = existing.copy(
+            barcode = existing.barcode?.takeIf { it.isNotBlank() } ?: p.barcode,
+            brand = existing.brand?.takeIf { it.isNotBlank() } ?: p.brand,
+            kcal = existing.kcal ?: p.kcal?.takeIf { sameBasis }, protein = existing.protein ?: p.protein?.takeIf { sameBasis },
+            fibre = existing.fibre ?: p.fibre?.takeIf { sameBasis }, carbs = existing.carbs ?: p.carbs?.takeIf { sameBasis }, fat = existing.fat ?: p.fat?.takeIf { sameBasis },
+            archived = false,
+        )
+        if (updated != existing) repo.saveFood(updated, updatePast = false)
+        return updated
+    }
+
     /** Saves a confirmed draft with its units and returns once the library has it. */
     suspend fun save(repo: ShokuRepository, food: Food, portions: List<FoodPortion>): Library {
         repo.saveFood(food, updatePast = false)

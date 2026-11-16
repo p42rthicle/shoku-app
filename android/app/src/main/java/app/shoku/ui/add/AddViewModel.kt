@@ -436,6 +436,30 @@ class AddViewModel(
 
     fun clearScan() { scan.value = ScanState.Idle }
 
+    private val latestLogs = repo.allEntries.stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, emptyList())
+
+    /**
+     * Picking a food-database or online product you already have under your own name ("Protein Wraps"
+     * online vs your "High-protein wrap"): your version, if you've logged it or it has the same barcode.
+     */
+    fun ownVersion(s: Suggestion): Pair<Suggestion, Int>? {
+        val lib = state.value.library ?: return null
+        val cand = s.directFood?.takeIf { !lib.foods.containsKey(it.id) } ?: s.reference?.toFood() ?: return null
+        val logs = latestLogs.value
+        val uses = logs.filter { !it.deleted && it.refType == RefType.FOOD }.groupingBy { it.refId }.eachCount()
+        val f = app.shoku.domain.Duplicates.matches(lib, cand, logs).firstOrNull { f ->
+            !f.archived && ((uses[f.id] ?: 0) > 0 || (!cand.barcode.isNullOrBlank() && f.barcode == cand.barcode))
+        } ?: return null
+        return foodSuggestion(f, lib) to (uses[f.id] ?: 0)
+    }
+
+    /** "Already in your library": log that food instead (the scanned barcode is added to it). */
+    fun useExisting(food: Food, draft: app.shoku.data.FoodDraft) = viewModelScope.launch {
+        val f = app.shoku.data.FoodLookup.useExisting(repo, food, draft)
+        val lib = repo.library.first { it.foods[f.id]?.barcode == f.barcode }
+        scan.value = ScanState.Ready(foodSuggestion(f, lib))
+    }
+
     // ---------- AI ----------
 
     private suspend fun currentLibrary(): Library = state.value.library ?: repo.library.first()

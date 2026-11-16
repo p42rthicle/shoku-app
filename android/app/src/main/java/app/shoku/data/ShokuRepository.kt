@@ -277,6 +277,50 @@ class ShokuRepository(private val db: ShokuDatabase, scope: CoroutineScope) {
         }
     }
 
+    /**
+     * Merges duplicate foods into [m].food (Settings › Duplicate foods). Past entries keep their numbers and
+     * units and now point at the one food; dishes, batches, meal templates and stock follow; stock amounts
+     * are converted to the merged unit. The others are deleted, their names kept as aliases for search.
+     */
+    suspend fun mergeFoods(m: app.shoku.domain.Duplicates.Merge): Int = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        val keepId = m.food.id
+        val ids = m.gone.map { it.id }.toSet() + keepId
+        val goneIds = m.gone.map { it.id }.toSet()
+        db.withTransaction {
+            lib.upsertFoods(listOf(m.food.copy(updatedAt = now)) + m.gone.map { it.copy(deleted = true, updatedAt = now) })
+            // Products under a removed generic follow it.
+            lib.upsertFoods(lib.allFoods().filter { !it.deleted && it.parentId in goneIds }.map { it.copy(parentId = keepId, updatedAt = now) })
+            lib.upsertPortions(lib.allPortions().filter { !it.deleted && it.foodId in ids }.map { it.copy(deleted = true, updatedAt = now) } + m.portions)
+            val moved = logs.allIncludingDeleted().filter { it.refType == app.shoku.data.db.RefType.FOOD && it.refId in goneIds }
+            logs.upsertAll(moved.map { it.copy(refId = keepId, updatedAt = now) })
+            lib.upsertDishIngredients(lib.allDishIngredients().filter { it.refType == app.shoku.data.db.RefType.FOOD && it.refId in goneIds }.map { it.copy(refId = keepId, updatedAt = now) })
+            lib.upsertBatchIngredients(lib.allBatchIngredients().filter { it.refType == app.shoku.data.db.RefType.FOOD && it.refId in goneIds }.map { it.copy(refId = keepId, updatedAt = now) })
+            val home = db.home()
+            home.upsertTemplateItems(home.allTemplateItems().filter { it.refType == app.shoku.data.db.RefType.FOOD && it.refId in goneIds }.map { it.copy(refId = keepId, updatedAt = now) })
+            // Stock: every row in the merged unit; two rows become one (the other's amount added as a move).
+            val rows = home.allStock().filter { !it.deleted && it.foodId in ids }
+            val moves = home.allMoves().filter { !it.deleted }
+            fun k(row: app.shoku.data.db.StockItem) = if (row.unit == m.food.unit) 1.0 else m.factors[row.foodId] ?: 1.0
+            val converted = rows.map { r ->
+                val f = k(r)
+                val rowMoves = moves.filter { it.itemId == r.id }.map { it.copy(delta = it.delta * f, updatedAt = now) }
+                Triple(r.copy(foodId = keepId, name = m.food.name, unit = m.food.unit, countQty = r.countQty?.times(f), lowAt = r.lowAt?.times(f), updatedAt = now), rowMoves, f)
+            }
+            val main = converted.sortedWith(compareByDescending<Triple<app.shoku.data.db.StockItem, *, *>> { it.first.countQty != null }.thenByDescending { it.first.countedAt }).firstOrNull()
+            if (main != null) {
+                home.upsertStock(listOf(main.first))
+                home.upsertMoves(main.second)
+                converted.filter { it !== main }.forEach { (r, ms, _) ->
+                    val amount = (r.countQty ?: 0.0) + ms.sumOf { it.delta }
+                    if (amount > 0) home.upsertMoves(listOf(app.shoku.data.db.StockMove(UUID.randomUUID().toString(), main.first.id, amount, now, "merged")))
+                    home.upsertStock(listOf(r.copy(deleted = true)))
+                }
+            }
+            moved.size
+        }
+    }
+
     suspend fun savePortions(rows: List<app.shoku.data.db.FoodPortion>) = withContext(Dispatchers.IO) {
         lib.upsertPortions(rows.map { it.copy(updatedAt = System.currentTimeMillis()) })
     }
