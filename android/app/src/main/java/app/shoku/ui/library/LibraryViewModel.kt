@@ -153,7 +153,7 @@ class LibraryViewModel(private val repo: ShokuRepository, val reference: app.sho
         viewModelScope.launch {
             runCatching {
                 // Recipes stay with library foods: batch ingredients must be real library rows.
-                val keys = aiClient.libraryKeys(library)
+                val keys = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { aiClient.libraryKeys(library) }
                 keys to aiClient.recipe(text, keys)
             }.onSuccess { (keys, r) ->
                 val refs = mutableListOf<IngredientRef>()

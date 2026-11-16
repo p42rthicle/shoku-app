@@ -175,7 +175,9 @@ class AddViewModel(
             val age = ageByDate.getOrPut(e.date) {
                 runCatching { ChronoUnit.DAYS.between(LocalDate.parse(e.date), today) }.getOrDefault(365L).coerceAtLeast(0)
             }
-            return 1.0 / (1.0 + age / 30.0)
+            // Recent habits count far more than old ones: a week ago ~0.7, a month ~0.1, four months ~0.007.
+            // (1 / (1 + age/30) let a summer of daily müsli outrank this week's meals.)
+            return 1.0 / (1.0 + (age / 10.0) * (age / 10.0))
         }
         // Entries of archived size rows ("Banana (m)") count towards their generic with the matching portion.
         fun canonical(e: LogEntry): LogEntry {
@@ -440,7 +442,12 @@ class AddViewModel(
 
     // The running AI request, so the loading overlay's Cancel can stop it.
     private var aiJob: kotlinx.coroutines.Job? = null
-    private fun aiLaunch(block: suspend kotlinx.coroutines.CoroutineScope.() -> Unit) = viewModelScope.launch(block = block).also { aiJob = it }
+    // Off the main thread from the first line, so the loader shows at once and the screen never waits on
+    // the library and database lookups; a tap while a request runs is ignored (no double requests).
+    private fun aiLaunch(block: suspend kotlinx.coroutines.CoroutineScope.() -> Unit): kotlinx.coroutines.Job? {
+        if (aiJob?.isActive == true) return aiJob
+        return viewModelScope.launch(Dispatchers.Default, block = block).also { aiJob = it }
+    }
 
     fun cancelAi() {
         aiJob?.cancel()

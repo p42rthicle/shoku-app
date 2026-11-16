@@ -210,7 +210,7 @@ class PlanViewModel(
         busy.value = null
         runCatching {
             val lib = repo.library.first()
-            val keys = ai.libraryKeys(lib, extra = ai.referenceCandidates(text, reference, lib))
+            val keys = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { ai.libraryKeys(lib, extra = ai.referenceCandidates(text, reference, lib)) }
             val items = ai.resolve(ai.meal(text, keys).items, keys, lib, byEye = false)
             var added = 0
             for (it in items) {

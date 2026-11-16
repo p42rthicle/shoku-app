@@ -61,7 +61,7 @@ fun parseQuery(raw: String): ParsedQuery {
     val multiple = Regex("""\b(and|und|with|mit|plus)\b|,|\+|&""").containsMatchIn(key)
     // "200g" / "4tbsp" / "2x" -> "200 g"
     val spaced = key.replace(Regex("""(\d)([a-z½¼¾])"""), "$1 $2").replace(Regex("""([½¼¾])(?=[a-z])"""), "$1 ")
-    val tokens = spaced.split(Regex("\\s+")).filter { it.isNotEmpty() }.toMutableList()
+    val tokens = spaced.split(SPACES).filter { it.isNotEmpty() }.toMutableList()
     if (multiple || tokens.size < 2) return ParsedQuery(key, null, null, multiple)
 
     var qty: Double? = null
@@ -143,12 +143,16 @@ fun matchScore(query: String, name: String, extra: String, family: String = ""):
     return matchScoreOwn(query, name, "$extra $family") / 4
 }
 
+/** Compiled once: building a Regex per call made scoring thousands of rows freeze the app. */
+private val NON_WORD = Regex("[^a-z0-9]+")
+private val SPACES = Regex("\\s+")
+
 private fun matchScoreOwn(query: String, name: String, extra: String): Int {
     val words = query.split(' ').filter { it.isNotEmpty() }
     if (words.isEmpty()) return 0
     val all = "$name $extra"
-    val nameWords = name.split(Regex("[^a-z0-9]+")).filter { it.isNotEmpty() }
-    val allWords = all.split(Regex("[^a-z0-9]+")).filter { it.isNotEmpty() }
+    val nameWords = name.split(NON_WORD).filter { it.isNotEmpty() }
+    val allWords = all.split(NON_WORD).filter { it.isNotEmpty() }
     var score = 0
     for (w in words) {
         score += when {

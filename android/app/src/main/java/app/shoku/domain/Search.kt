@@ -4,8 +4,12 @@ import app.shoku.data.db.Food
 import java.text.Normalizer
 
 /** Lowercase, umlauts and accents folded ("Müsli" -> "musli", "Öl" -> "ol"), ß -> ss. */
+/** Compiled once (searchKey runs for every row of every search). */
+private val MARKS = Regex("\\p{M}+")
+private val WHITESPACE = Regex("\\s+")
+
 fun searchKey(s: String): String =
-    Normalizer.normalize(s.lowercase().replace("ß", "ss"), Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "")
+    Normalizer.normalize(s.lowercase().replace("ß", "ss"), Normalizer.Form.NFD).replace(MARKS, "")
 
 /** Everything a food can be found by: its name, brand, aliases, and its generic's name and aliases. */
 fun Library.searchText(f: Food): String {
@@ -15,7 +19,7 @@ fun Library.searchText(f: Food): String {
 
 /** True when every search word appears somewhere in [text] (already a searchKey). */
 fun matchesAll(text: String, query: String): Boolean {
-    val words = searchKey(query).split(Regex("\\s+")).filter { it.isNotEmpty() }
+    val words = searchKey(query).split(WHITESPACE).filter { it.isNotEmpty() }
     return words.all { it in text }
 }
 
