@@ -172,8 +172,9 @@ class AiClient {
     suspend fun plate(jpegsBase64: List<String>, note: String?, keys: LibraryKeys): AiMealResult =
         call("/ai/plate", json.encodeToString(ImagesBody.serializer(), ImagesBody(jpegsBase64.take(4), text = note, library = keys.items)), AiMealResult.serializer())
 
-    suspend fun product(jpegBase64: String): AiProductResult =
-        call("/ai/product", json.encodeToString(ImageBody.serializer(), ImageBody(jpegBase64)), AiProductResult.serializer())
+    /** One to four photos of the same pack (front for the name, back for the nutrition table). */
+    suspend fun product(jpegsBase64: List<String>): AiProductResult =
+        call("/ai/product", json.encodeToString(ImagesBody.serializer(), ImagesBody(jpegsBase64.take(4))), AiProductResult.serializer())
 
     suspend fun label(jpegBase64: String): AiLabelResult =
         call("/ai/label", json.encodeToString(ImageBody.serializer(), ImageBody(jpegBase64)), AiLabelResult.serializer())

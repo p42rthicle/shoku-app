@@ -316,7 +316,14 @@ private fun preview(base64: String): androidx.compose.ui.graphics.ImageBitmap? =
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PlateSheet(onEstimate: (photos: List<String>, note: String) -> Unit, onDismiss: () -> Unit) {
+fun PlateSheet(
+    onEstimate: (photos: List<String>, note: String) -> Unit,
+    onDismiss: () -> Unit,
+    title: String = "Photo of your food",
+    hint: String = "Add up to 4 photos of the same plate. A top view plus a side view, with a fork or glass in the frame, gives the best portion estimate.",
+    showNote: Boolean = true,
+    action: (Int) -> String = { n -> "Estimate from $n ${if (n == 1) "photo" else "photos"}" },
+) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val photos = remember { mutableStateListOf<PlatePhoto>() }
@@ -346,9 +353,9 @@ fun PlateSheet(onEstimate: (photos: List<String>, note: String) -> Unit, onDismi
         shape = ShokuShapes.Sheet,
     ) {
         Column(Modifier.padding(horizontal = 20.dp).navigationBarsPadding().imePadding().padding(bottom = 16.dp)) {
-            Text("Photo of your food", style = MaterialTheme.typography.headlineSmall)
+            Text(title, style = MaterialTheme.typography.headlineSmall)
             Text(
-                "Add up to 4 photos of the same plate. A top view plus a side view, with a fork or glass in the frame, gives the best portion estimate.",
+                hint,
                 style = MaterialTheme.typography.bodyMedium, color = ShokuColors.Muted,
             )
             Spacer(Modifier.height(14.dp))
@@ -381,13 +388,26 @@ fun PlateSheet(onEstimate: (photos: List<String>, note: String) -> Unit, onDismi
                     modifier = Modifier.weight(1f), icon = androidx.compose.material.icons.Icons.Outlined.PhotoLibrary,
                 )
             }
-            Spacer(Modifier.height(12.dp))
-            app.shoku.ui.components.LabeledField("Note (optional)", note, { note = it }, Modifier.fillMaxWidth(), placeholder = "e.g. shared plate, I ate half")
+            if (showNote) {
+                Spacer(Modifier.height(12.dp))
+                app.shoku.ui.components.LabeledField("Note (optional)", note, { note = it }, Modifier.fillMaxWidth(), placeholder = "e.g. shared plate, I ate half")
+            }
             Spacer(Modifier.height(14.dp))
             PrimaryButton(
-                if (photos.isEmpty()) "Add a photo first" else "Estimate from ${photos.size} ${if (photos.size == 1) "photo" else "photos"}",
+                if (photos.isEmpty()) "Add a photo first" else action(photos.size),
                 onClick = { if (photos.isNotEmpty()) onEstimate(photos.map { it.base64 }, note) },
             )
         }
     }
 }
+
+/** Photos of one pack: the front for the brand and name, the back for the nutrition table. */
+@Composable
+fun PackSheet(onIdentify: (photos: List<String>) -> Unit, onDismiss: () -> Unit) = PlateSheet(
+    onEstimate = { photos, _ -> onIdentify(photos) },
+    onDismiss = onDismiss,
+    title = "Photos of the pack",
+    hint = "The front for the brand and name, the back for the nutrition table: up to 4 photos of the same pack. One photo works too; without a table, Shoku AI uses typical values.",
+    showNote = false,
+    action = { n -> "Work it out from $n ${if (n == 1) "photo" else "photos"}" },
+)

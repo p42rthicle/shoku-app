@@ -156,7 +156,7 @@ Matching to their library:
 const val MEAL_TASK_TEXT = "Task: turn their description of what they ate into items. If the description says which meal it was, set meal; otherwise null."
 
 const val LABEL_TASK = "Task: read the nutrition table on this food package. Use the per 100 g / 100 ml column (not per serving). Energy in kcal (convert from kJ only if kcal is missing). Name and brand from the package if visible. German labels: Brennwert = energy, Eiweiß = protein, Ballaststoffe = fibre, Kohlenhydrate = carbs, Fett = fat. If the table is not readable, set readable false."
-const val PRODUCT_TASK = "Task: identify the packaged product in this photo. It may show the front, back or side of the pack, often with no nutrition table (a supplement tub, a spice packet). Name: the product as sold, short, without the brand (e.g. Creatine monohydrate). Brand: as printed on the pack. If a nutrition table is visible, read the per 100 g / 100 ml column and set from_label true. Otherwise give typical per-100 values for this kind of product from what you know and set from_label false (pure creatine, caffeine or electrolyte powders are about 0 kcal). serving_size: grams or ml in one serving or scoop if the pack says, else null. note: one short line saying what you read from the pack and what is typical. If you cannot tell what the product is, set identified false."
+const val PRODUCT_TASK = "Task: identify the packaged product in the photos (one to four photos of the same pack). They may show the front, back or side of the pack, often with no nutrition table (a supplement tub, a spice packet). Take the name and brand from the front of the pack when a photo shows it, and the values from the nutrition table when one shows. Name: the product as sold, short, without the brand (e.g. Creatine monohydrate). Brand: as printed on the pack. If a nutrition table is visible in any photo, read the per 100 g / 100 ml column and set from_label true. Otherwise give typical per-100 values for this kind of product from what you know and set from_label false (pure creatine, caffeine or electrolyte powders are about 0 kcal). serving_size: grams or ml in one serving or scoop if the pack says, else null. note: one short line saying what you read from the pack and what is typical. If you cannot tell what the product is, set identified false."
 
 const val PLATE_TASK = "Task: estimate what is on this plate or in this bowl. List each visible food with a realistic amount; use the plate, cutlery, glasses and bowls for scale. Match to their library when it is clearly the same dish (e.g. their own dal or rice batch). Confidence is at most medium for anything judged by eye."
 
@@ -236,7 +236,7 @@ object DirectRoutes {
     )
 
     private fun readProduct(body: JsonObject) = ask(
-        PRODUCT_TASK, null, listOf(imageBlock(body["image"], body.str("mediaType")), UserBlock.Text("What is this product?")), PRODUCT_RESULT, maxTokens = 2000,
+        PRODUCT_TASK, null, images(body) + UserBlock.Text("What is this product?"), PRODUCT_RESULT, maxTokens = 2000,
     )
 
     private fun plate(body: JsonObject): AskRequest {

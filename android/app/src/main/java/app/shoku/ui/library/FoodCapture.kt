@@ -9,6 +9,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import app.shoku.ShokuApplication
+import app.shoku.ui.add.PackSheet
 import app.shoku.data.BarcodeResult
 import app.shoku.data.FoodDraft
 import app.shoku.data.FoodLookup
@@ -45,14 +46,15 @@ fun NewFoodEditor(
         prefill = draft.prefill,
         familyChoices = draft.families,
         title = when {
-            draft.fromPack && !draft.fromLabel -> "From the photo of the pack"
+            draft.fromPack -> "From the photos of the pack"
             draft.fromLabel -> "Read from the label"
             draft.found -> "Found on Open Food Facts"
             barcode != null -> "New product"
             else -> "New food"
         },
         note = when {
-            draft.fromPack && !draft.fromLabel -> listOfNotNull("Brand and name from the pack; the values are typical for this kind of product. Check them, then save.", draft.note).joinToString(" ")
+            draft.fromPack && draft.fromLabel -> listOfNotNull("Name and brand from the pack, values from its label. Check them, then save.", draft.note).joinToString(" ")
+            draft.fromPack -> listOfNotNull("Brand and name from the pack; the values are typical for this kind of product. Check them, then save.", draft.note).joinToString(" ")
             draft.fromLabel -> listOfNotNull("Check the numbers against the label, then save.", draft.note).joinToString(" ")
             draft.found -> "Check the values against the label, then save. Barcode $barcode."
             barcode != null -> draft.note ?: "Barcode $barcode isn't in Open Food Facts. Take a photo of the label, or type the values (per 100 g or 100 ml)."
@@ -89,25 +91,31 @@ fun rememberFoodCapture(onFood: (Food) -> Unit): FoodCapture {
     var busy by remember { mutableStateOf<Pair<String, Boolean>?>(null) } // message, is AI
     var job by remember { mutableStateOf<Job?>(null) }
     var labelBarcode by remember { mutableStateOf<String?>(null) }
-    var packMode by remember { mutableStateOf(false) } // the photo is of the pack, not its nutrition table
+    var packing by remember { mutableStateOf(false) } // the pack photo sheet is open
     fun say(text: String) = Toast.makeText(context, text, Toast.LENGTH_LONG).show()
 
     val photo = rememberPhotoCapture { jpeg ->
-        val pack = packMode
         job = scope.launch {
-            busy = (if (pack) "Working out what this is…" else "Reading the label…") to true
-            runCatching {
-                val lib = app.repository.library.first()
-                // A label photo without a nutrition table still tells what the product is.
-                if (pack) FoodLookup.product(ai, lib, jpeg, labelBarcode) else FoodLookup.labelOrProduct(ai, lib, jpeg, labelBarcode)
-            }
+            busy = "Reading the label…" to true
+            // A label photo without a nutrition table still tells what the product is.
+            runCatching { FoodLookup.labelOrProduct(ai, app.repository.library.first(), jpeg, labelBarcode) }
                 .onSuccess { d -> if (d == null) say("Couldn't tell what that is. Try the front of the pack, with the name in focus.") else draft = d }
                 .onFailure { if (it !is CancellationException) say(it.message ?: "AI request failed") }
             busy = null
         }
     }
-    fun readLabel(barcode: String?) { labelBarcode = barcode; packMode = false; draft = null; photo() }
-    fun packPhoto(barcode: String?) { labelBarcode = barcode; packMode = true; draft = null; photo() }
+    fun readLabel(barcode: String?) { labelBarcode = barcode; draft = null; photo() }
+    fun packPhoto(barcode: String?) { labelBarcode = barcode; draft = null; packing = true }
+    fun identify(photos: List<String>) {
+        packing = false
+        job = scope.launch {
+            busy = "Working out what this is…" to true
+            runCatching { FoodLookup.product(ai, app.repository.library.first(), photos, labelBarcode) }
+                .onSuccess { d -> if (d == null) say("Couldn't tell what that is. Try the front of the pack, with the name in focus.") else draft = d }
+                .onFailure { if (it !is CancellationException) say(it.message ?: "AI request failed") }
+            busy = null
+        }
+    }
 
     fun onCode(code: String) {
         job = scope.launch {
@@ -137,6 +145,7 @@ fun rememberFoodCapture(onFood: (Food) -> Unit): FoodCapture {
         )
     }
 
+    if (packing) PackSheet(onIdentify = ::identify, onDismiss = { packing = false })
     busy?.let { (msg, isAi) ->
         BusyOverlay(msg, hint = if (isAi) "Usually 5 to 15 seconds" else "Your foods, then Open Food Facts", ai = isAi, onCancel = { job?.cancel(); busy = null })
     }

@@ -34,6 +34,7 @@ val CHANGELOG = listOf(
             "Supplements: tell it how many you had and on which day, and it takes off every dose you've ticked since, then says how long the stock lasts and when to order (a week ahead)",
             "Today shows a \"Running low\" card when a supplement runs out within two weeks",
             "Pack photo: for packs with no barcode match or no label (a creatine tub), take a photo of any side and Shoku AI fills in the brand, the name and typical values (or the label's, if it shows one). In Add, every search sheet and Library",
+            "Pack photos: add the front and the back of a pack (up to 4); the name and brand come from the front, the values from the label",
             "Adding to stock asks whether it's a food or a supplement (creatine, vitamins and the like start on Supplement) and where it goes (fridge, freezer, pantry, spices)",
             "Something already in stock as a food can move to Supplements from its stock card, keeping the amount you have",
             "A label photo with no nutrition table works out what the product is instead of failing",

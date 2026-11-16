@@ -502,9 +502,9 @@ class AddViewModel(
     }
 
     /** A photo of any side of a pack (no label needed) -> a new food: brand and name, typical values if none printed. */
-    fun aiPack(jpegBase64: String, barcode: String? = null) = aiLaunch {
+    fun aiPack(jpegsBase64: List<String>, barcode: String? = null) = aiLaunch {
         ai.value = AiState.Working("Working out what this is…")
-        runCatching { app.shoku.data.FoodLookup.product(aiClient, currentLibrary(), jpegBase64, barcode) }
+        runCatching { app.shoku.data.FoodLookup.product(aiClient, currentLibrary(), jpegsBase64, barcode) }
             .onSuccess { draft ->
                 if (draft == null) { ai.value = AiState.Failed("Couldn't tell what that is. Try the front of the pack, with the name in focus."); return@onSuccess }
                 ai.value = AiState.Idle

@@ -82,11 +82,11 @@ object FoodLookup {
     }
 
     /**
-     * A photo of any side of a pack -> a draft: brand and name from the pack, values from its nutrition table
+     * Photos of a pack (front, back) -> a draft: brand and name from the front, values from its nutrition table
      * if one shows, else typical ones for that kind of product. Null when the product can't be told.
      */
-    suspend fun product(ai: AiClient, library: Library, jpegBase64: String, barcode: String?): FoodDraft? {
-        val r = ai.product(jpegBase64)
+    suspend fun product(ai: AiClient, library: Library, jpegsBase64: List<String>, barcode: String?): FoodDraft? {
+        val r = ai.product(jpegsBase64)
         val name = r.name?.trim()?.takeIf { it.isNotEmpty() } ?: r.brand?.trim()?.takeIf { it.isNotEmpty() }
         if (!r.identified || name == null) return null
         val prefill = Food(
@@ -102,7 +102,7 @@ object FoodLookup {
 
     /** The label photo, and when it shows no nutrition table, what the product is from the same photo. */
     suspend fun labelOrProduct(ai: AiClient, library: Library, jpegBase64: String, barcode: String?): FoodDraft? =
-        label(ai, library, jpegBase64, barcode) ?: product(ai, library, jpegBase64, barcode)
+        label(ai, library, jpegBase64, barcode) ?: product(ai, library, listOf(jpegBase64), barcode)
 
     /** An empty food named [name], to type the values in (or read them from the label). */
     fun manual(library: Library, name: String): FoodDraft =

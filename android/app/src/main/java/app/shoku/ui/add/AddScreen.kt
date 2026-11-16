@@ -108,7 +108,7 @@ fun AddScreen(
     var describing by remember { mutableStateOf(startDescribing) }
     var labelBarcode by remember { mutableStateOf<String?>(null) }
     val captureLabel = rememberPhotoCapture { photo -> vm.aiLabel(photo, labelBarcode) }
-    val capturePack = rememberPhotoCapture { photo -> vm.aiPack(photo, labelBarcode) }
+    var packing by remember { mutableStateOf(false) }
     var plating by remember { mutableStateOf(startPlate) }
     val context = LocalContext.current
     val addedCount = added.sumOf { it.size }
@@ -204,7 +204,7 @@ fun AddScreen(
                         onDescribe = { describing = true },
                         onLabel = { labelBarcode = null; captureLabel() },
                         onPlate = { plating = true },
-                        onPack = { labelBarcode = null; capturePack() },
+                        onPack = { labelBarcode = null; packing = true },
                     )
                 }
                 item(key = "make-tiles") {
@@ -327,7 +327,8 @@ fun AddScreen(
         }
     }
 
-    ScanEditor(vm, scan, onReadLabel = { barcode -> labelBarcode = barcode; captureLabel() }, onPackPhoto = { barcode -> labelBarcode = barcode; capturePack() })
+    ScanEditor(vm, scan, onReadLabel = { barcode -> labelBarcode = barcode; captureLabel() }, onPackPhoto = { barcode -> labelBarcode = barcode; packing = true })
+    if (packing) PackSheet(onIdentify = { photos -> packing = false; vm.aiPack(photos, labelBarcode) }, onDismiss = { packing = false })
     (aiState as? AiState.Working)?.let { st -> app.shoku.ui.components.BusyOverlay(st.what, onCancel = vm::cancelAi) }
 
     if (describing) {
