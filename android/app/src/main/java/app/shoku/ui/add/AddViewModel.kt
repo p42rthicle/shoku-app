@@ -488,12 +488,25 @@ class AddViewModel(
     /** A photo of a nutrition label -> a new food to confirm (keeps a scanned barcode if there was one). */
     fun aiLabel(jpegBase64: String, barcode: String? = null) = aiLaunch {
         ai.value = AiState.Working("Reading the label…")
-        runCatching { app.shoku.data.FoodLookup.label(aiClient, currentLibrary(), jpegBase64, barcode) }
+        // No nutrition table in the photo: it still works out what the product is.
+        runCatching { app.shoku.data.FoodLookup.labelOrProduct(aiClient, currentLibrary(), jpegBase64, barcode) }
             .onSuccess { draft ->
                 if (draft == null) {
-                    ai.value = AiState.Failed("Couldn't read a nutrition table in that photo. Try closer, with the table flat and in focus.")
+                    ai.value = AiState.Failed("Couldn't read a label or tell what that is. Try the front of the pack, with the name in focus.")
                     return@onSuccess
                 }
+                ai.value = AiState.Idle
+                scan.value = ScanState.NewFood(draft)
+            }
+            .onFailure { ai.value = aiFailure(it) }
+    }
+
+    /** A photo of any side of a pack (no label needed) -> a new food: brand and name, typical values if none printed. */
+    fun aiPack(jpegBase64: String, barcode: String? = null) = aiLaunch {
+        ai.value = AiState.Working("Working out what this is…")
+        runCatching { app.shoku.data.FoodLookup.product(aiClient, currentLibrary(), jpegBase64, barcode) }
+            .onSuccess { draft ->
+                if (draft == null) { ai.value = AiState.Failed("Couldn't tell what that is. Try the front of the pack, with the name in focus."); return@onSuccess }
                 ai.value = AiState.Idle
                 scan.value = ScanState.NewFood(draft)
             }

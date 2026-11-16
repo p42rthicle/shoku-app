@@ -108,6 +108,7 @@ fun AddScreen(
     var describing by remember { mutableStateOf(startDescribing) }
     var labelBarcode by remember { mutableStateOf<String?>(null) }
     val captureLabel = rememberPhotoCapture { photo -> vm.aiLabel(photo, labelBarcode) }
+    val capturePack = rememberPhotoCapture { photo -> vm.aiPack(photo, labelBarcode) }
     var plating by remember { mutableStateOf(startPlate) }
     val context = LocalContext.current
     val addedCount = added.sumOf { it.size }
@@ -203,6 +204,7 @@ fun AddScreen(
                         onDescribe = { describing = true },
                         onLabel = { labelBarcode = null; captureLabel() },
                         onPlate = { plating = true },
+                        onPack = { labelBarcode = null; capturePack() },
                     )
                 }
                 item(key = "make-tiles") {
@@ -325,7 +327,7 @@ fun AddScreen(
         }
     }
 
-    ScanEditor(vm, scan, onReadLabel = { barcode -> labelBarcode = barcode; captureLabel() })
+    ScanEditor(vm, scan, onReadLabel = { barcode -> labelBarcode = barcode; captureLabel() }, onPackPhoto = { barcode -> labelBarcode = barcode; capturePack() })
     (aiState as? AiState.Working)?.let { st -> app.shoku.ui.components.BusyOverlay(st.what, onCancel = vm::cancelAi) }
 
     if (describing) {
@@ -370,13 +372,14 @@ fun AddScreen(
 }
 
 @Composable
-private fun ScanEditor(vm: AddViewModel, scan: ScanState, onReadLabel: (String?) -> Unit) {
+private fun ScanEditor(vm: AddViewModel, scan: ScanState, onReadLabel: (String?) -> Unit, onPackPhoto: (String?) -> Unit) {
     val st = scan as? ScanState.NewFood ?: return
     app.shoku.ui.library.NewFoodEditor(
         st.draft,
         onReadLabel = { b -> vm.clearScan(); onReadLabel(b) },
         onSave = { food, portions -> vm.saveScanned(food, portions) },
         onDismiss = { vm.clearScan() },
+        onPackPhoto = { b -> vm.clearScan(); onPackPhoto(b) },
     )
 }
 

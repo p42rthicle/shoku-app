@@ -106,6 +106,22 @@ const LABEL_RESULT = {
 	},
 };
 
+const PRODUCT_RESULT = {
+	type: 'object',
+	additionalProperties: false,
+	required: ['identified', 'from_label', 'name', 'brand', 'unit', 'kcal', 'protein', 'fibre', 'carbs', 'fat', 'serving_size', 'note'],
+	properties: {
+		identified: { type: 'boolean', description: 'False if you cannot tell what the product is' },
+		from_label: { type: 'boolean', description: 'True if the values were read from a nutrition table in the photo' },
+		name: nullable({ type: 'string' }),
+		brand: nullable({ type: 'string' }),
+		unit: { type: 'string', enum: ['g', 'ml'], description: 'Basis of the per-100 values' },
+		kcal: nullable(num), protein: nullable(num), fibre: nullable(num), carbs: nullable(num), fat: nullable(num),
+		serving_size: nullable({ type: 'number', description: 'Grams or ml in one serving or scoop, if the pack says' }),
+		note: nullable({ type: 'string', description: 'What was read from the pack and what is typical, briefly' }),
+	},
+};
+
 const RECIPE_RESULT = {
 	type: 'object',
 	additionalProperties: false,
@@ -208,6 +224,15 @@ async function readLabel(apiKey, body) {
 		task: 'Task: read the nutrition table on this food package. Use the per 100 g / 100 ml column (not per serving). Energy in kcal (convert from kJ only if kcal is missing). Name and brand from the package if visible. German labels: Brennwert = energy, Eiweiß = protein, Ballaststoffe = fibre, Kohlenhydrate = carbs, Fett = fat. If the table is not readable, set readable false.',
 		content: [image(body), { type: 'text', text: 'Read this label.' }],
 		schema: LABEL_RESULT,
+		maxTokens: 2000,
+	});
+}
+
+async function readProduct(apiKey, body) {
+	return ask(apiKey, {
+		task: 'Task: identify the packaged product in this photo. It may show the front, back or side of the pack, often with no nutrition table (a supplement tub, a spice packet). Name: the product as sold, short, without the brand (e.g. Creatine monohydrate). Brand: as printed on the pack. If a nutrition table is visible, read the per 100 g / 100 ml column and set from_label true. Otherwise give typical per-100 values for this kind of product from what you know and set from_label false (pure creatine, caffeine or electrolyte powders are about 0 kcal). serving_size: grams or ml in one serving or scoop if the pack says, else null. note: one short line saying what you read from the pack and what is typical. If you cannot tell what the product is, set identified false.',
+		content: [image(body), { type: 'text', text: 'What is this product?' }],
+		schema: PRODUCT_RESULT,
 		maxTokens: 2000,
 	});
 }
@@ -394,4 +419,4 @@ async function planWeek(apiKey, body) {
 	});
 }
 
-module.exports = { planWeek, parseMeal, readLabel, plate, recipe, submitUnits, unitsResult, setWorkspace, HttpError, MODEL, costOf };
+module.exports = { planWeek, parseMeal, readLabel, readProduct, plate, recipe, submitUnits, unitsResult, setWorkspace, HttpError, MODEL, costOf };

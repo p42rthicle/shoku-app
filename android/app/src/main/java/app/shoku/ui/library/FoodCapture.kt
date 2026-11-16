@@ -30,7 +30,13 @@ import kotlinx.coroutines.launch
  * to type. [onReadLabel] (with the scanned barcode, if any) offers reading the values from a photo.
  */
 @Composable
-fun NewFoodEditor(draft: FoodDraft, onReadLabel: ((String?) -> Unit)?, onSave: (Food, List<FoodPortion>) -> Unit, onDismiss: () -> Unit) {
+fun NewFoodEditor(
+    draft: FoodDraft,
+    onReadLabel: ((String?) -> Unit)?,
+    onSave: (Food, List<FoodPortion>) -> Unit,
+    onDismiss: () -> Unit,
+    onPackPhoto: ((String?) -> Unit)? = null,
+) {
     val pending = remember(draft) { mutableStateOf<List<FoodPortion>>(emptyList()) }
     val barcode = draft.prefill.barcode
     FoodEditor(
@@ -39,18 +45,23 @@ fun NewFoodEditor(draft: FoodDraft, onReadLabel: ((String?) -> Unit)?, onSave: (
         prefill = draft.prefill,
         familyChoices = draft.families,
         title = when {
+            draft.fromPack && !draft.fromLabel -> "From the photo of the pack"
             draft.fromLabel -> "Read from the label"
             draft.found -> "Found on Open Food Facts"
             barcode != null -> "New product"
             else -> "New food"
         },
         note = when {
+            draft.fromPack && !draft.fromLabel -> listOfNotNull("Brand and name from the pack; the values are typical for this kind of product. Check them, then save.", draft.note).joinToString(" ")
             draft.fromLabel -> listOfNotNull("Check the numbers against the label, then save.", draft.note).joinToString(" ")
             draft.found -> "Check the values against the label, then save. Barcode $barcode."
             barcode != null -> draft.note ?: "Barcode $barcode isn't in Open Food Facts. Take a photo of the label, or type the values (per 100 g or 100 ml)."
             else -> "Type the values per 100 g (or 100 ml, 1 pc), or read them from the label."
         },
-        extraAction = if (!draft.found && onReadLabel != null) "Read the label with a photo" to { onReadLabel(barcode) } else null,
+        extraActions = if (draft.found) emptyList() else listOfNotNull(
+            onReadLabel?.let { f -> "Read the label with a photo" to { f(barcode) } },
+            onPackPhoto?.let { f -> "No label? Take a photo of the pack" to { f(barcode) } },
+        ),
         // FoodEditor hands over the units first, then the food. The pack's serving is only suggested.
         portions = emptyList(),
         suggested = draft.portions,
@@ -62,7 +73,7 @@ fun NewFoodEditor(draft: FoodDraft, onReadLabel: ((String?) -> Unit)?, onSave: (
 }
 
 /** Ways to bring in a food that isn't in the library yet; each ends with it saved there. */
-class FoodCapture(val scan: () -> Unit, val label: () -> Unit, val newFood: (String) -> Unit)
+class FoodCapture(val scan: () -> Unit, val label: () -> Unit, val newFood: (String) -> Unit, val pack: () -> Unit = {})
 
 /**
  * The scanner (library, then Open Food Facts), a photo of the nutrition label (AI) and a food typed by
@@ -78,18 +89,25 @@ fun rememberFoodCapture(onFood: (Food) -> Unit): FoodCapture {
     var busy by remember { mutableStateOf<Pair<String, Boolean>?>(null) } // message, is AI
     var job by remember { mutableStateOf<Job?>(null) }
     var labelBarcode by remember { mutableStateOf<String?>(null) }
+    var packMode by remember { mutableStateOf(false) } // the photo is of the pack, not its nutrition table
     fun say(text: String) = Toast.makeText(context, text, Toast.LENGTH_LONG).show()
 
     val photo = rememberPhotoCapture { jpeg ->
+        val pack = packMode
         job = scope.launch {
-            busy = "Reading the label…" to true
-            runCatching { FoodLookup.label(ai, app.repository.library.first(), jpeg, labelBarcode) }
-                .onSuccess { d -> if (d == null) say("Couldn't read a nutrition table in that photo. Try closer, with the table flat and in focus.") else draft = d }
+            busy = (if (pack) "Working out what this is…" else "Reading the label…") to true
+            runCatching {
+                val lib = app.repository.library.first()
+                // A label photo without a nutrition table still tells what the product is.
+                if (pack) FoodLookup.product(ai, lib, jpeg, labelBarcode) else FoodLookup.labelOrProduct(ai, lib, jpeg, labelBarcode)
+            }
+                .onSuccess { d -> if (d == null) say("Couldn't tell what that is. Try the front of the pack, with the name in focus.") else draft = d }
                 .onFailure { if (it !is CancellationException) say(it.message ?: "AI request failed") }
             busy = null
         }
     }
-    fun readLabel(barcode: String?) { labelBarcode = barcode; draft = null; photo() }
+    fun readLabel(barcode: String?) { labelBarcode = barcode; packMode = false; draft = null; photo() }
+    fun packPhoto(barcode: String?) { labelBarcode = barcode; packMode = true; draft = null; photo() }
 
     fun onCode(code: String) {
         job = scope.launch {
@@ -115,6 +133,7 @@ fun rememberFoodCapture(onFood: (Food) -> Unit): FoodCapture {
             },
             label = { readLabel(null) },
             newFood = { name -> scope.launch { draft = FoodLookup.manual(app.repository.library.first(), name) } },
+            pack = { packPhoto(null) },
         )
     }
 
@@ -125,6 +144,7 @@ fun rememberFoodCapture(onFood: (Food) -> Unit): FoodCapture {
         NewFoodEditor(
             d,
             onReadLabel = ::readLabel,
+            onPackPhoto = ::packPhoto,
             onSave = { food, portions ->
                 draft = null
                 scope.launch { FoodLookup.save(app.repository, food, portions); onFood(food) }

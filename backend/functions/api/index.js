@@ -11,7 +11,7 @@
  *   GET  /sync/pull?since=<server_ts>                                           (300 per page)
  *   GET  /sync/stats
  *   GET  /health
- *   POST /ai/meal | /ai/label | /ai/plate | /ai/recipe   (see ai.js)
+ *   POST /ai/meal | /ai/label | /ai/product | /ai/plate | /ai/recipe   (see ai.js)
  *   POST /ai/plan                                           (week plan; no app screen uses it yet)
  *   POST /ai/units/submit, GET /ai/units/result?id=      (Batch API, half price)
  *   GET  /ai/usage, POST /ai/cap { usd }                  (monthly spending cap, default $30)
@@ -195,7 +195,7 @@ module.exports = async (req, res) => {
 		const app = catalyst.initialize(req, { scope: 'admin' });
 
 		if (req.method === 'GET' && path === '/health') return send(res, 200, { ok: true, time: Date.now(), ai: Boolean(secrets.anthropicKey) });
-		const aiRoutes = { '/ai/meal': ai.parseMeal, '/ai/label': ai.readLabel, '/ai/plate': ai.plate, '/ai/recipe': ai.recipe, '/ai/plan': ai.planWeek };
+		const aiRoutes = { '/ai/meal': ai.parseMeal, '/ai/label': ai.readLabel, '/ai/product': ai.readProduct, '/ai/plate': ai.plate, '/ai/recipe': ai.recipe, '/ai/plan': ai.planWeek };
 		if (req.method === 'POST' && aiRoutes[path]) {
 			const body = await readBody(req);
 			await checkCap(app);

@@ -16,6 +16,8 @@ data class FoodDraft(
     /** Values came from somewhere (Open Food Facts or a label), not empty fields. */
     val found: Boolean,
     val fromLabel: Boolean = false,
+    /** From a photo of the pack (no barcode match, maybe no label): typical values when [fromLabel] is false. */
+    val fromPack: Boolean = false,
     val note: String? = null,
     /** Household units to start with, e.g. "slice" = the pack's serving size. */
     val portions: List<FoodPortion> = emptyList(),
@@ -79,6 +81,29 @@ object FoodLookup {
             portions = servingPortion(prefill, r.servingSize))
     }
 
+    /**
+     * A photo of any side of a pack -> a draft: brand and name from the pack, values from its nutrition table
+     * if one shows, else typical ones for that kind of product. Null when the product can't be told.
+     */
+    suspend fun product(ai: AiClient, library: Library, jpegBase64: String, barcode: String?): FoodDraft? {
+        val r = ai.product(jpegBase64)
+        val name = r.name?.trim()?.takeIf { it.isNotEmpty() } ?: r.brand?.trim()?.takeIf { it.isNotEmpty() }
+        if (!r.identified || name == null) return null
+        val prefill = Food(
+            id = ShokuRepository.newId(),
+            name = name,
+            unit = r.unit, baseQty = 100.0,
+            kcal = r.kcal, protein = r.protein, fibre = r.fibre, carbs = r.carbs, fat = r.fat,
+            barcode = barcode, brand = r.brand?.trim()?.takeIf { it.isNotEmpty() }, source = if (r.fromLabel) "label" else "pack",
+        )
+        return FoodDraft(prefill, library.suggestFamilies("$name ${r.brand.orEmpty()}"), found = true, fromLabel = r.fromLabel, fromPack = true, note = r.note,
+            portions = servingPortion(prefill, r.servingSize))
+    }
+
+    /** The label photo, and when it shows no nutrition table, what the product is from the same photo. */
+    suspend fun labelOrProduct(ai: AiClient, library: Library, jpegBase64: String, barcode: String?): FoodDraft? =
+        label(ai, library, jpegBase64, barcode) ?: product(ai, library, jpegBase64, barcode)
+
     /** An empty food named [name], to type the values in (or read them from the label). */
     fun manual(library: Library, name: String): FoodDraft =
         FoodDraft(
@@ -104,6 +129,7 @@ object FoodLookup {
             listOf("bread", "brot", "toast", "scheibe", "slice", "loaf", "cheese slice", "kase").any { it in n } -> "slice"
             listOf("biscuit", "cookie", "keks", "rusk", "cracker", "wafer", "waffel").any { it in n } -> "piece"
             listOf("bar", "riegel").any { Regex("\\b$it\\b").containsMatchIn(n) } -> "bar"
+            listOf("creatine", "kreatin", "whey", "protein powder", "pulver", "powder", "electrolyte").any { it in n } -> "scoop"
             else -> "serving"
         }
         return listOf(FoodPortion(java.util.UUID.randomUUID().toString(), food.id, label, qty))

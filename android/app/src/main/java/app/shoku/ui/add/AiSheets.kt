@@ -25,6 +25,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Mic
+import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.ReceiptLong
 import androidx.compose.material.icons.outlined.RestaurantMenu
 import androidx.compose.material.icons.outlined.TextFields
@@ -73,10 +74,12 @@ import app.shoku.ui.theme.ShokuShapes
 
 /** Three entry points for AI logging, shown above the usual items. */
 @Composable
-fun AiTiles(onDescribe: () -> Unit, onLabel: () -> Unit, onPlate: () -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+fun AiTiles(onDescribe: () -> Unit, onLabel: () -> Unit, onPlate: () -> Unit, onPack: () -> Unit = {}) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Tile("Describe", Icons.Outlined.TextFields, onDescribe, Modifier.weight(1f))
         Tile("Label", Icons.Outlined.ReceiptLong, onLabel, Modifier.weight(1f))
+        // A photo of the pack itself, for packs with no label to read (a creatine tub).
+        Tile("Pack", Icons.Outlined.Inventory2, onPack, Modifier.weight(1f))
         Tile("Plate", Icons.Outlined.RestaurantMenu, onPlate, Modifier.weight(1f))
     }
 }

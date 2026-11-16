@@ -66,7 +66,7 @@ fun FoodEditor(
     familyChoices: List<Food> = emptyList(),
     title: String? = null,
     note: String? = null,
-    extraAction: Pair<String, () -> Unit>? = null,
+    extraActions: List<Pair<String, () -> Unit>> = emptyList(),
     /** The food's own portions; with [onSavePortions] set, they can be edited here. */
     portions: List<FoodPortion> = emptyList(),
     /** Portions it gets from its generic (read-only here). */
@@ -112,7 +112,7 @@ fun FoodEditor(
         ) {
             Text(title ?: if (food == null) "New food" else "Edit food", style = MaterialTheme.typography.headlineSmall)
             if (note != null) Text(note, style = MaterialTheme.typography.bodySmall, color = ShokuColors.Muted)
-            if (extraAction != null) {
+            extraActions.forEach { extraAction ->
                 app.shoku.ui.components.SecondaryButton(extraAction.first, onClick = extraAction.second)
             }
             LabeledField("Name", name, { name = it }, Modifier.fillMaxWidth(), placeholder = "e.g. Kadhi pakora")

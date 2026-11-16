@@ -95,6 +95,17 @@ val LABEL_RESULT = obj(
     "note" to nullable(typed("string", "Anything uncertain, briefly")),
 )
 
+val PRODUCT_RESULT = obj(
+    "identified" to typed("boolean", "False if you cannot tell what the product is"),
+    "from_label" to typed("boolean", "True if the values were read from a nutrition table in the photo"),
+    "name" to nullable(typed("string")),
+    "brand" to nullable(typed("string")),
+    "unit" to typed("string", "Basis of the per-100 values", listOf("g", "ml")),
+    "kcal" to nullable(num), "protein" to nullable(num), "fibre" to nullable(num), "carbs" to nullable(num), "fat" to nullable(num),
+    "serving_size" to nullable(typed("number", "Grams or ml in one serving or scoop, if the pack says")),
+    "note" to nullable(typed("string", "What was read from the pack and what is typical, briefly")),
+)
+
 val RECIPE_RESULT = obj("name" to nullable(typed("string")), "servings" to nullable(num), "ingredients" to arr(ITEM))
 
 val UNITS_RESULT = obj(
@@ -145,6 +156,7 @@ Matching to their library:
 const val MEAL_TASK_TEXT = "Task: turn their description of what they ate into items. If the description says which meal it was, set meal; otherwise null."
 
 const val LABEL_TASK = "Task: read the nutrition table on this food package. Use the per 100 g / 100 ml column (not per serving). Energy in kcal (convert from kJ only if kcal is missing). Name and brand from the package if visible. German labels: Brennwert = energy, Eiweiß = protein, Ballaststoffe = fibre, Kohlenhydrate = carbs, Fett = fat. If the table is not readable, set readable false."
+const val PRODUCT_TASK = "Task: identify the packaged product in this photo. It may show the front, back or side of the pack, often with no nutrition table (a supplement tub, a spice packet). Name: the product as sold, short, without the brand (e.g. Creatine monohydrate). Brand: as printed on the pack. If a nutrition table is visible, read the per 100 g / 100 ml column and set from_label true. Otherwise give typical per-100 values for this kind of product from what you know and set from_label false (pure creatine, caffeine or electrolyte powders are about 0 kcal). serving_size: grams or ml in one serving or scoop if the pack says, else null. note: one short line saying what you read from the pack and what is typical. If you cannot tell what the product is, set identified false."
 
 const val PLATE_TASK = "Task: estimate what is on this plate or in this bowl. List each visible food with a realistic amount; use the plate, cutlery, glasses and bowls for scale. Match to their library when it is clearly the same dish (e.g. their own dal or rice batch). Confidence is at most medium for anything judged by eye."
 
@@ -169,11 +181,12 @@ Use what they eat often (their history) and what is at home, especially things t
 /** Turns the app's request bodies into Claude requests exactly as ai.js does. Errors carry ai.js's messages. */
 object DirectRoutes {
     const val UNITS_CHUNK = 40
-    val ASK_ROUTES = setOf("/ai/meal", "/ai/label", "/ai/plate", "/ai/recipe", "/ai/plan")
+    val ASK_ROUTES = setOf("/ai/meal", "/ai/label", "/ai/product", "/ai/plate", "/ai/recipe", "/ai/plan")
 
     fun build(path: String, body: JsonObject): AskRequest = when (path) {
         "/ai/meal" -> parseMeal(body)
         "/ai/label" -> readLabel(body)
+        "/ai/product" -> readProduct(body)
         "/ai/plate" -> plate(body)
         "/ai/recipe" -> recipe(body)
         "/ai/plan" -> planWeek(body)
@@ -220,6 +233,10 @@ object DirectRoutes {
 
     private fun readLabel(body: JsonObject) = ask(
         LABEL_TASK, null, listOf(imageBlock(body["image"], body.str("mediaType")), UserBlock.Text("Read this label.")), LABEL_RESULT, maxTokens = 2000,
+    )
+
+    private fun readProduct(body: JsonObject) = ask(
+        PRODUCT_TASK, null, listOf(imageBlock(body["image"], body.str("mediaType")), UserBlock.Text("What is this product?")), PRODUCT_RESULT, maxTokens = 2000,
     )
 
     private fun plate(body: JsonObject): AskRequest {

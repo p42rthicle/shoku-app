@@ -1,5 +1,6 @@
 package app.shoku.ui.library
 
+import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -193,6 +194,7 @@ private fun LibraryList(
                     when (tab) {
                         LibTab.Foods -> androidx.compose.foundation.layout.Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {
                             SquareIconButton(androidx.compose.material.icons.Icons.Outlined.QrCodeScanner, "Scan a barcode", onClick = capture.scan)
+                            SquareIconButton(androidx.compose.material.icons.Icons.Outlined.PhotoCamera, "Photo of a pack", onClick = capture.pack)
                             SquareIconButton(Icons.Rounded.Add, "New food", onClick = { creatingFood = true })
                         }
                         LibTab.Dishes -> SquareIconButton(Icons.Rounded.Add, "New dish", onClick = { creatingDish = true })

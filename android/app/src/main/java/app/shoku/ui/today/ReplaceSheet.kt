@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.ReceiptLong
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.rounded.Search
@@ -214,8 +215,9 @@ fun FoodSearchSheet(
             Spacer(Modifier.height(10.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 SourceChip("Scan", Icons.Outlined.QrCodeScanner, Modifier.weight(1f), capture.scan)
-                SourceChip("Label photo", Icons.Outlined.ReceiptLong, Modifier.weight(1f), capture.label)
-                SourceChip("New food", Icons.Rounded.Add, Modifier.weight(1f)) { capture.newFood(query.trim()) }
+                SourceChip("Label", Icons.Outlined.ReceiptLong, Modifier.weight(1f), capture.label)
+                SourceChip("Pack", Icons.Outlined.Inventory2, Modifier.weight(1f), capture.pack)
+                SourceChip("New", Icons.Rounded.Add, Modifier.weight(1f)) { capture.newFood(query.trim()) }
             }
             Spacer(Modifier.height(6.dp))
             LazyColumn(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {

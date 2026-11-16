@@ -45,6 +45,23 @@ data class AiItem(
 @Serializable data class AiMealResult(val items: List<AiItem>, val meal: String? = null)
 @Serializable data class AiRecipeResult(val name: String? = null, val servings: Double? = null, val ingredients: List<AiItem>)
 
+/** A photo of any side of a pack: what the product is, with values read from it or typical ones. */
+@Serializable
+data class AiProductResult(
+    val identified: Boolean,
+    @SerialName("from_label") val fromLabel: Boolean = false,
+    val name: String? = null,
+    val brand: String? = null,
+    val unit: String = "g",
+    val kcal: Double? = null,
+    val protein: Double? = null,
+    val fibre: Double? = null,
+    val carbs: Double? = null,
+    val fat: Double? = null,
+    @SerialName("serving_size") val servingSize: Double? = null,
+    val note: String? = null,
+)
+
 @Serializable
 data class AiLabelResult(
     val readable: Boolean,
@@ -154,6 +171,9 @@ class AiClient {
     /** One to four photos of the same meal; several angles help the portion estimate. */
     suspend fun plate(jpegsBase64: List<String>, note: String?, keys: LibraryKeys): AiMealResult =
         call("/ai/plate", json.encodeToString(ImagesBody.serializer(), ImagesBody(jpegsBase64.take(4), text = note, library = keys.items)), AiMealResult.serializer())
+
+    suspend fun product(jpegBase64: String): AiProductResult =
+        call("/ai/product", json.encodeToString(ImageBody.serializer(), ImageBody(jpegBase64)), AiProductResult.serializer())
 
     suspend fun label(jpegBase64: String): AiLabelResult =
         call("/ai/label", json.encodeToString(ImageBody.serializer(), ImageBody(jpegBase64)), AiLabelResult.serializer())
