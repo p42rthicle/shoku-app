@@ -106,6 +106,8 @@ fun LazyListScope.stockSection(
     onDismiss: (ShoppingItem) -> Unit,
     onShowHidden: () -> Unit,
     onBoughtWeek: (app.shoku.domain.WeekItem) -> Unit = {},
+    /** Swiped away from For next week: hidden until its stock changes. */
+    onDismissWeek: (app.shoku.domain.WeekItem) -> Unit = {},
     open: Set<String> = emptySet(),
     onToggle: (String) -> Unit = {},
     /** Search: only what matches, and every list fully open. */
@@ -206,19 +208,23 @@ fun LazyListScope.stockSection(
     }
     if (view.week.isNotEmpty()) {
         item(key = "week-label") {
-            SectionLabel("For next week · ${view.week.size}", trailing = view.weekFrom?.let { "from ${it.dayMonth()} · plan minus stock" })
+            SectionLabel("For next week · ${view.week.size}", trailing = view.weekFrom?.let { "from ${it.dayMonth()} · swipe to remove" })
         }
         item(key = "week") {
             OutlinedCard(Modifier.fillMaxWidth()) {
                 view.week.shown("week" in open, 3).forEachIndexed { idx, w ->
+                    androidx.compose.runtime.key(w.foodId) {
                     if (idx > 0) Hairline()
-                    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    app.shoku.ui.today.SwipeToDelete(enabled = true, onDelete = { onDismissWeek(w) }) {
+                    Row(Modifier.fillMaxWidth().background(ShokuColors.Paper).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text("${w.name} · ${formatUnitQty(w.buyRounded, w.buyUnit)}", style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text("Plan needs ${formatUnitQty(Math.round(w.inBuyUnit(w.need) * 10) / 10.0, w.buyUnit)}, have ${formatUnitQty(Math.round(w.inBuyUnit(w.have) * 10) / 10.0, w.buyUnit)}",
                                 style = MaterialTheme.typography.bodySmall, color = ShokuColors.Muted)
                         }
                         Box(Modifier.clip(CircleShape).clickable { onBoughtWeek(w) }) { StatusChip("Bought", ChipStyle.Filled) }
+                    }
+                    }
                     }
                 }
             }

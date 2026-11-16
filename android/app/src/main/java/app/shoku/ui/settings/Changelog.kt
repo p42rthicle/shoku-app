@@ -25,6 +25,14 @@ data class Release(val version: String, val date: String, val changes: List<Stri
  */
 val CHANGELOG = listOf(
     Release(
+        "0.9.46", "16 Nov 2026",
+        listOf(
+            "For next week rows can be swiped away too, like To buy",
+            "A swiped-away row comes back on its own once its stock changes (bought, added, recounted), so it can remind you again when it's needed; Show hidden brings them all back",
+            "For next week counts stock kept in another unit of the food (10 wraps in pieces against a plan in grams)",
+        ),
+    ),
+    Release(
         "0.9.45", "16 Nov 2026",
         listOf(
             "Add to stock instead, from Add: when the stock step is done (or cancelled) you're back on the same Add, with \"Added 170 g … to stock\" shown there",

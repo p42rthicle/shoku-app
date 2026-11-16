@@ -299,6 +299,7 @@ private fun LibraryList(
                     onBought = planVm::bought, onOpen = { stockUi.open = it }, onStatus = planVm::setStatus,
                     onDismiss = planVm::dismiss, onShowHidden = planVm::showHidden,
                     onBoughtWeek = { w -> planVm.boughtWeek(w) },
+                    onDismissWeek = { w -> stock.weekFrom?.let { from -> planVm.dismissWeek(w, from) } },
                     open = planVm.openLists, onToggle = planVm::toggleList, query = query,
                 )
             }

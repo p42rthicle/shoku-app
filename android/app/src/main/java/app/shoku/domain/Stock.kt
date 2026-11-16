@@ -148,6 +148,29 @@ fun Library.shoppingList(levels: List<StockLevel>, plan: PlanState, horizonDays:
     return out.distinctBy { it.name }
 }
 
+/** The weekly list row's key for hiding it: that food, that week. */
+fun WeekItem.hideKey(from: LocalDate) = "week|$foodId|$from"
+
+/**
+ * When each stock item, and each food family in stock, last changed by your hand: added or bought (a
+ * positive move), recounted or edited. Eating doesn't count. A row hidden from To buy or For next week
+ * shows again once its stock changes after it was hidden (bought, updated, used up and recounted).
+ * Keys: "item:<stock item id>" and "food:<family key>".
+ */
+fun Library.stockChangedAt(items: List<app.shoku.data.db.StockItem>, moves: List<app.shoku.data.db.StockMove>): Map<String, Long> {
+    val lastAdd = moves.filter { !it.deleted && it.delta > 0 }.groupBy { it.itemId }.mapValues { (_, m) -> m.maxOf { it.at } }
+    val out = HashMap<String, Long>()
+    items.filter { !it.deleted }.forEach { i ->
+        val t = maxOf(i.updatedAt, i.countedAt, lastAdd[i.id] ?: 0L)
+        out["item:${i.id}"] = t
+        i.foodId?.let { f -> val k = "food:${familyKey(f)}"; out[k] = maxOf(out[k] ?: 0L, t) }
+    }
+    return out
+}
+
+/** Whether a row hidden at [hiddenAt] stays hidden: nothing about its stock changed since. */
+fun stillHidden(hiddenAt: Long?, changedAt: Long?): Boolean = hiddenAt != null && (changedAt == null || changedAt <= hiddenAt)
+
 private fun formatAmountPlain(v: Double) = if (v == Math.floor(v)) v.toLong().toString() else "%.1f".format(java.util.Locale.US, v)
 
 /** One line of the weekly shopping list: what the plan needs, what's at home, what to buy. */
@@ -198,7 +221,14 @@ fun Library.weekShopping(plan: PlanState, levels: List<StockLevel>, from: LocalD
         val f = foods[foodId] ?: return@mapNotNull null
         val family = levels.filter { l -> l.item.foodId != null && familyKey(l.item.foodId) == familyKey(foodId) && l.item.supplementId == null }
         if (family.any { !it.item.tracked && it.item.status != "out" }) return@mapNotNull null
-        val have = family.filter { it.item.tracked && it.item.unit == f.unit }.sumOf { it.qty ?: 0.0 }
+        val have = family.filter { it.item.tracked }.sumOf { l ->
+            val q = l.qty ?: return@sumOf 0.0
+            when {
+                l.item.unit == f.unit -> q
+                foods[l.item.foodId]?.unit == f.unit -> inFoodUnit(l.item.foodId!!, l.item.unit, q) ?: 0.0
+                else -> 0.0
+            }
+        }
         // A single household portion used throughout (not g/ml) makes a friendlier shopping unit.
         val portion = units[foodId]?.singleOrNull()?.takeIf { it != f.unit && it !in WEIGHT_UNITS }
             ?.let { label -> portionsOf(f).firstOrNull { it.label == label }?.let { label to it.qty } }

@@ -1,5 +1,8 @@
 package app.shoku.ui.plan
 
+import app.shoku.domain.hideKey
+import app.shoku.domain.stockChangedAt
+import app.shoku.domain.familyKey
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -51,11 +54,23 @@ class PlanViewModel(
     private val reference: app.shoku.data.reference.ReferenceData,
     private val prefs: android.content.SharedPreferences? = null,
 ) : ViewModel() {
-    /** Shopping rows swiped away (name|reason), kept on the phone. */
-    private val dismissed = kotlinx.coroutines.flow.MutableStateFlow(prefs?.getStringSet("dismissed", emptySet()).orEmpty())
-    fun dismiss(s: app.shoku.domain.ShoppingItem) = save(dismissed.value + s.key)
-    fun showHidden() = save(emptySet())
-    private fun save(set: Set<String>) { dismissed.value = set; prefs?.edit()?.putStringSet("dismissed", set)?.apply() }
+    /**
+     * Rows swiped away from To buy (name|reason) and For next week (week|food|monday), with when, kept on the
+     * phone ("key<TAB>millis"). One shows again once its stock changes after that (stockChangedAt).
+     */
+    private val dismissed = kotlinx.coroutines.flow.MutableStateFlow(loadDismissed())
+    private fun loadDismissed(): Map<String, Long> {
+        val raw = prefs?.getStringSet("dismissed", emptySet()).orEmpty()
+        val now = System.currentTimeMillis()
+        // Hidden before 0.9.46 (no time): count them as hidden now.
+        val map = raw.associate { e -> e.substringBefore('\t') to (e.substringAfter('\t', "").toLongOrNull() ?: now) }
+        if (raw.any { '\t' !in it }) prefs?.edit()?.putStringSet("dismissed", map.map { "${it.key}\t${it.value}" }.toSet())?.apply()
+        return map
+    }
+    fun dismiss(s: app.shoku.domain.ShoppingItem) = save(dismissed.value + (s.key to System.currentTimeMillis()))
+    fun dismissWeek(w: app.shoku.domain.WeekItem, from: LocalDate) = save(dismissed.value + (w.hideKey(from) to System.currentTimeMillis()))
+    fun showHidden() = save(emptyMap())
+    private fun save(map: Map<String, Long>) { dismissed.value = map; prefs?.edit()?.putStringSet("dismissed", map.map { "${it.key}\t${it.value}" }.toSet())?.apply() }
     private val ai = app.shoku.data.ai.AiClient()
     /** Which section is showing: 0 meals, 1 supplements, 2 stock. */
     var section by androidx.compose.runtime.mutableIntStateOf(0)
@@ -170,9 +185,15 @@ class PlanViewModel(
             val f = lib.foods[id] ?: return@mapNotNull null
             id to (listOf(f.unit to 1.0) + lib.portionsOf(f).filter { it.label != f.unit && it.qty > 0 }.map { it.label to it.qty }).distinctBy { it.first }
         }.toMap()
+        val changed = lib.stockChangedAt(stock.first, stock.second)
+        fun hiddenRow(s: app.shoku.domain.ShoppingItem) = app.shoku.domain.stillHidden(
+            hidden[s.key], s.item?.let { changed["item:${it.id}"] } ?: s.foodId?.let { changed["food:${lib.familyKey(it)}"] },
+        )
+        val week = lib.weekShopping(plan, levels, nextMonday)
+        fun hiddenWeek(w: app.shoku.domain.WeekItem) = app.shoku.domain.stillHidden(hidden[w.hideKey(nextMonday)], changed["food:${lib.familyKey(w.foodId)}"])
         StockView(
-            levels, all.filter { it.key !in hidden }, hiddenCount = all.count { it.key in hidden },
-            week = lib.weekShopping(plan, levels, nextMonday), weekFrom = nextMonday, units = units,
+            levels, all.filterNot(::hiddenRow), hiddenCount = all.count(::hiddenRow) + week.count(::hiddenWeek),
+            week = week.filterNot(::hiddenWeek), weekFrom = nextMonday, units = units,
         )
     }.flowOn(kotlinx.coroutines.Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), StockView())
 
