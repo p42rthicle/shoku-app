@@ -108,6 +108,8 @@ fun SettingsScreen(
     var editingGoal by remember { mutableStateOf(false) }
 
     var showDuplicates by remember { mutableStateOf(false) }
+    var showMemory by remember { mutableStateOf(false) }
+    if (showMemory) MemorySheet(onDismiss = { showMemory = false })
     if (showDuplicates) DuplicatesSheet(onDismiss = { showDuplicates = false })
     LazyColumn(
         Modifier.fillMaxSize(),
@@ -170,6 +172,11 @@ fun SettingsScreen(
 
         item { Spacer(Modifier.height(4.dp)); SectionLabel("AI this month") }
         item { AiUsageCard(vm) }
+        item {
+            // What the AI has learned from you (AiMemory): see it, forget what's wrong.
+            val n = remember(showMemory) { app.shoku.data.ai.AiMemory.all().size }
+            SecondaryButton(if (n == 0) "What Shoku AI has learned" else "What Shoku AI has learned · $n", onClick = { showMemory = true })
+        }
         item { ClaudeKeyCard(onChanged = { vm.loadUsage() }) }
 
         item { Spacer(Modifier.height(4.dp)); SectionLabel("Cloud sync") }

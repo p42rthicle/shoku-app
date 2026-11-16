@@ -110,4 +110,18 @@ class PhotosAndMemoryTest {
         assertEquals(AiMemory.FIX, all.single().kind)
         assertTrue("wrap" in all.single().words)
     }
+
+    @Test fun forgetRestoreAndForgetAll() {
+        fresh()
+        AiMemory.learnFromReview(listOf(item("Basmati rice, cooked", "b1", 200.0, "rice")), listOf(item("Boiled Rice", "r1", 150.0, "rice")), "Dinner")
+        AiMemory.learnFromReview(listOf(item("Mix Dal", "d1", 150.0, "dal")), listOf(item("Mix Dal", "d1", 150.0, "dal")), "Dinner")
+        val rice = AiMemory.all().first { "Boiled Rice" in it.line }
+        AiMemory.forget(rice.key)
+        assertTrue(AiMemory.all().none { "Boiled Rice" in it.line })
+        AiMemory.restore(rice)
+        assertEquals(2, AiMemory.all().size)
+        AiMemory.forgetAll()
+        assertTrue(AiMemory.all().isEmpty())
+        assertTrue(AiMemory.hints(emptyList(), "rice", "Dinner").isEmpty())
+    }
 }

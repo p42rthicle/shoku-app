@@ -25,6 +25,12 @@ data class Release(val version: String, val date: String, val changes: List<Stri
  */
 val CHANGELOG = listOf(
     Release(
+        "0.9.42", "16 Nov 2026",
+        listOf(
+            "Settings › What Shoku AI has learned: every correction and match it remembers, how often and when; forget one (with Bring back) or everything",
+        ),
+    ),
+    Release(
         "0.9.41", "16 Nov 2026",
         listOf(
             "Smarter memory for Shoku AI: keeps up to 500 things it learned (your corrections, and matches to your own foods you kept); the same correction again makes it stronger; each request gets the memories that fit it (words you typed, the same meal), your usual amounts at that meal and what's cooked in your fridge",

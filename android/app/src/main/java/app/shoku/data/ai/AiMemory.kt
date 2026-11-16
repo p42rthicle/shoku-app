@@ -79,6 +79,15 @@ object AiMemory {
         save(list)
     }
 
+    /** Forgets one memory (Settings › What Shoku AI has learned). */
+    fun forget(key: String) { if (ready) save(all().filter { it.key != key }) }
+
+    /** Puts a forgotten memory back (Undo). */
+    fun restore(m: Memory) { if (ready) save(all().filter { it.key != m.key } + m) }
+
+    /** Forgets everything learned (usual amounts and the fridge still come from the log). */
+    fun forgetAll() { if (ready) prefs.edit().putString("memories", "[]").remove("corrections").apply() }
+
     private fun amount(qty: Double, unit: String) = formatUnitQty(qty, unit)
 
     /** The review: what the AI proposed ([before], by its "said") against what was logged ([after]). */
