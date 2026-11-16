@@ -183,28 +183,41 @@ class PlanViewModel(
 
     private suspend fun libraryWith(foodId: String) = repo.library.first { it.foods.containsKey(foodId) }
 
-    fun pickForStock(pick: app.shoku.ui.today.ReplacePick) = viewModelScope.launch {
-        val (type, id) = repo.resolvePick(pick)
-        if (type != app.shoku.data.db.RefType.FOOD) { busy.value = "Only foods can go in stock"; return@launch }
-        val food = libraryWith(id).foods.getValue(id)
-        val pack = (pick as? app.shoku.ui.today.ReplacePick.Online)?.product?.packQty
-        amountFor.value = food to (pack ?: if (food.unit == "pc") 1.0 else food.baseQty)
+    /** True from picking a food for stock until its amount sheet is up (so Add can wait to come back). */
+    val picking = kotlinx.coroutines.flow.MutableStateFlow(false)
+
+    fun pickForStock(pick: app.shoku.ui.today.ReplacePick) {
+        picking.value = true
+        viewModelScope.launch {
+            try {
+                val (type, id) = repo.resolvePick(pick)
+                if (type != app.shoku.data.db.RefType.FOOD) { busy.value = "Only foods can go in stock"; return@launch }
+                val food = libraryWith(id).foods.getValue(id)
+                val online = (pick as? app.shoku.ui.today.ReplacePick.Online)?.product?.packQty
+                amountFor.value = food to (online ?: packAmount(food))
+            } finally { picking.value = false }
+        }
     }
+
+    /** Where an amount for stock starts: the whole pack (scan or photo), its "pack" unit, else what was bought last time. */
+    private suspend fun packAmount(food: app.shoku.data.db.Food): Double =
+        app.shoku.data.PackSizes.of(food.id)
+            ?: libraryWith(food.id).portionsOf(food).firstOrNull { it.label == "pack" }?.qty
+            ?: home.lastBought(food.id)
+            ?: if (food.unit == "pc") 1.0 else food.baseQty
 
     /**
      * A food just scanned or picked for stock: ask how much, starting at the whole pack (1000 g of rice) when
      * the scan knew it, else its "pack" unit, else what was added last time.
      */
-    fun startAmount(food: app.shoku.data.db.Food) = viewModelScope.launch {
-        val pack = app.shoku.data.PackSizes.of(food.id)
-            ?: libraryWith(food.id).portionsOf(food).firstOrNull { it.label == "pack" }?.qty
-            ?: home.lastBought(food.id)
-        amountFor.value = food to (pack ?: if (food.unit == "pc") 1.0 else food.baseQty)
-    }
+    fun startAmount(food: app.shoku.data.db.Food) = viewModelScope.launch { amountFor.value = food to packAmount(food) }
 
     /** "Bought it? Add to stock instead" from Add after a scan. */
-    fun startAmountFor(foodId: String) = viewModelScope.launch {
-        repo.library.first().foods[foodId]?.let { startAmount(it) }
+    fun startAmountFor(foodId: String) {
+        picking.value = true
+        viewModelScope.launch {
+            try { repo.library.first().foods[foodId]?.let { amountFor.value = it to packAmount(it) } } finally { picking.value = false }
+        }
     }
 
     /** "2 kg chana dal, 30 eggs, 1 l milk" -> stock, through the AI (one request, about a cent). */

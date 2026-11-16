@@ -116,6 +116,9 @@ fun ShokuApp() {
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     // Add to stock from Today's + (Add › "Add to stock instead"): the stock sheets, shown over Today.
     val homeStockUi = remember { app.shoku.ui.plan.StockUi() }
+    /** The Add that "Add to stock instead" came from, to return to; and the message to show there. */
+    var stockReturn by remember { mutableStateOf<AddTarget?>(null) }
+    var stockAdded by remember { mutableStateOf<String?>(null) }
     // The search's query and scroll survive a trip to a result and back.
     val searchUi = remember { app.shoku.ui.search.SearchUi() }
     fun openSearch() { app.shoku.ui.search.SearchReturn.action = null; searchUi.reset(); searchOpen = true }
@@ -302,8 +305,24 @@ fun ShokuApp() {
             ) }
         }
 
+        // "Add to stock instead" from Add: once the stock step is over (added or cancelled), back to that Add.
+        val stockPicking by planVm.picking.collectAsState()
+        val stockAmount by planVm.amountFor.collectAsState()
+        val stockOpen = homeStockUi.searching || homeStockUi.saying || stockPicking || stockAmount != null
+        val stockScope = androidx.compose.runtime.rememberCoroutineScope()
+        androidx.compose.runtime.LaunchedEffect(stockOpen, stockReturn) {
+            val back = stockReturn
+            if (!stockOpen && back != null) {
+                val m = stockAdded
+                stockReturn = null; stockAdded = null
+                addTarget = back.copy(describe = false, barcode = null, plate = false, scanner = false, batchId = null, query = null)
+                // Its own scope: this effect restarts as soon as stockReturn changes.
+                if (m != null) stockScope.launch { snackbar.showSnackbar(m) }
+            }
+        }
+
         // Library has its own stock sheets; elsewhere these show the ones started from Add.
-        if (tab != Tab.Library) app.shoku.ui.plan.StockSheets(planVm, homeStockUi)
+        if (tab != Tab.Library) app.shoku.ui.plan.StockSheets(planVm, homeStockUi, onStockAdded = if (stockReturn != null) { m -> stockAdded = m } else null)
 
         addTarget?.let { target ->
             val addVm: AddViewModel = viewModel(
@@ -314,8 +333,8 @@ fun ShokuApp() {
                 AddScreen(
                     addVm, snackbar, onClose = { addTarget = null }, startDescribing = target.describe, startBarcode = target.barcode,
                     startPlate = target.plate, startScanner = target.scanner, startBatchId = target.batchId, startQuery = target.query,
-                    onAddToStock = { addTarget = null; homeStockUi.searching = true },
-                    onStockFood = { id -> addTarget = null; planVm.startAmountFor(id) },
+                    onAddToStock = { stockReturn = target; addTarget = null; homeStockUi.searching = true },
+                    onStockFood = { id -> stockReturn = target; addTarget = null; planVm.startAmountFor(id) },
                     onCook = { name ->
                         // Cook in Library, then come back to this Add with the new batch ready to log.
                         val back = target.copy(describe = false, barcode = null, plate = false, scanner = false, batchId = null)

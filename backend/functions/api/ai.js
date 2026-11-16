@@ -121,7 +121,7 @@ const LABEL_RESULT = {
 const PRODUCT_RESULT = {
 	type: 'object',
 	additionalProperties: false,
-	required: ['identified', 'from_label', 'name', 'brand', 'unit', 'kcal', 'protein', 'fibre', 'carbs', 'fat', 'serving_size', 'note'],
+	required: ['identified', 'from_label', 'name', 'brand', 'unit', 'kcal', 'protein', 'fibre', 'carbs', 'fat', 'serving_size', 'pack_size', 'note'],
 	properties: {
 		identified: { type: 'boolean', description: 'False if you cannot tell what the product is' },
 		from_label: { type: 'boolean', description: 'True if the values were read from a nutrition table in the photo' },
@@ -130,6 +130,7 @@ const PRODUCT_RESULT = {
 		unit: { type: 'string', enum: ['g', 'ml'], description: 'Basis of the per-100 values' },
 		kcal: nullable(num), protein: nullable(num), fibre: nullable(num), carbs: nullable(num), fat: nullable(num),
 		serving_size: nullable({ type: 'number', description: 'Grams or ml in one serving or scoop, if the pack says' }),
+		pack_size: nullable({ type: 'number', description: 'Net weight or volume of the whole pack in the same unit, if printed (500 for 500 g)' }),
 		note: nullable({ type: 'string', description: 'What was read from the pack and what is typical, briefly' }),
 	},
 };

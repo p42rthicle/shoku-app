@@ -101,7 +101,7 @@ object FoodLookup {
             barcode = barcode, brand = r.brand?.trim()?.takeIf { it.isNotEmpty() }, source = if (r.fromLabel) "label" else "pack",
         )
         return FoodDraft(prefill, library.suggestFamilies("$name ${r.brand.orEmpty()}"), found = true, fromLabel = r.fromLabel, fromPack = true, note = r.note,
-            portions = servingPortion(prefill, r.servingSize))
+            portions = servingPortion(prefill, r.servingSize), packQty = r.packSize?.takeIf { it > 0 })
     }
 
     /** The label photo, and when it shows no nutrition table, what the product is from the same photo. */

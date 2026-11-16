@@ -112,6 +112,7 @@ val PRODUCT_RESULT = obj(
     "unit" to typed("string", "Basis of the per-100 values", listOf("g", "ml")),
     "kcal" to nullable(num), "protein" to nullable(num), "fibre" to nullable(num), "carbs" to nullable(num), "fat" to nullable(num),
     "serving_size" to nullable(typed("number", "Grams or ml in one serving or scoop, if the pack says")),
+    "pack_size" to nullable(typed("number", "Net weight or volume of the whole pack in the same unit, if printed (500 for 500 g)")),
     "note" to nullable(typed("string", "What was read from the pack and what is typical, briefly")),
 )
 

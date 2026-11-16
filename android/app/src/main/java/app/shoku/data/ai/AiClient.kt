@@ -65,6 +65,8 @@ data class AiProductResult(
     val carbs: Double? = null,
     val fat: Double? = null,
     @SerialName("serving_size") val servingSize: Double? = null,
+    /** The whole pack (500 g), for adding it to stock. */
+    @SerialName("pack_size") val packSize: Double? = null,
     val note: String? = null,
 )
 

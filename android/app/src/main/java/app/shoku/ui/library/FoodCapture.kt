@@ -37,6 +37,7 @@ import app.shoku.data.db.RefType
 import app.shoku.data.BarcodeResult
 import app.shoku.data.FoodDraft
 import app.shoku.data.FoodLookup
+import app.shoku.data.PackSizes
 import app.shoku.data.ai.AiClient
 import app.shoku.data.db.Food
 import app.shoku.data.db.FoodPortion
@@ -213,6 +214,7 @@ fun rememberFoodCapture(onFood: (Food) -> Unit): FoodCapture {
             onUseExisting = { f -> val d0 = d; draft = null; scope.launch { onFood(FoodLookup.useExisting(app.repository, f, d0)) } },
             onSave = { food, portions ->
                 draft = null
+                d.packQty?.let { PackSizes.remember(food.id, it) }
                 scope.launch { FoodLookup.save(app.repository, food, portions); onFood(food) }
             },
             onDismiss = { draft = null },

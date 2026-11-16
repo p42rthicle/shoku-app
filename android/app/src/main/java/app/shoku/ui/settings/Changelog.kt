@@ -25,6 +25,13 @@ data class Release(val version: String, val date: String, val changes: List<Stri
  */
 val CHANGELOG = listOf(
     Release(
+        "0.9.45", "16 Nov 2026",
+        listOf(
+            "Add to stock instead, from Add: when the stock step is done (or cancelled) you're back on the same Add, with \"Added 170 g … to stock\" shown there",
+            "A pack photo reads the pack's net weight, and adding it to stock starts at the whole pack (500 g) instead of 100 g",
+        ),
+    ),
+    Release(
         "0.9.44", "16 Nov 2026",
         listOf(
             "Shoku AI keeps one memory per food, with what you changed last: \"Crushed Gobhi Soya Paneer: AI said 200 g, it was 1 serving (~150 g)\"",

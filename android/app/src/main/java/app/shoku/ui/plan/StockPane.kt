@@ -60,7 +60,7 @@ fun rememberStockScan(vm: PlanViewModel): () -> Unit =
 
 /** The sheets behind the stock list: add by search, say it, how much, and editing one item. */
 @Composable
-fun StockSheets(vm: PlanViewModel, ui: StockUi) {
+fun StockSheets(vm: PlanViewModel, ui: StockUi, onStockAdded: ((String) -> Unit)? = null) {
     val context = LocalContext.current
     val library by vm.library.collectAsState()
     val stock by vm.stockView.collectAsState()
@@ -119,7 +119,9 @@ fun StockSheets(vm: PlanViewModel, ui: StockUi) {
                 confirmLabel = "Add to stock", showStatus = false,
                 onConfirm = { r ->
                     vm.addStock(food, r.unit, r.qty, place)
-                    android.widget.Toast.makeText(context, "Added ${app.shoku.ui.formatUnitQty(r.qty, r.unit)} ${food.name} to stock", android.widget.Toast.LENGTH_SHORT).show()
+                    val msg = "Added ${app.shoku.ui.formatUnitQty(r.qty, r.unit)} ${food.name} to stock"
+                    if (onStockAdded != null) onStockAdded(msg)
+                    else android.widget.Toast.makeText(context.applicationContext, msg, android.widget.Toast.LENGTH_SHORT).show()
                 },
                 onDismiss = { vm.amountFor.value = null },
             )
