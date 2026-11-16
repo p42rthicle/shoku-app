@@ -58,22 +58,56 @@ class PhotosAndMemoryTest {
         room.close()
     }
 
-    @Test fun correctionsAndUsualPortionsBecomeHints() {
-        AiMemory.init(context)
-        context.getSharedPreferences("ai_memory", 0).edit().clear().commit()
-        fun item(name: String, id: String, qty: Double, said: String) = ResolvedItem(name, "food", id, "g", qty, null, "typical", null, "medium", said)
-        // The photo said 200 g basmati; it was 150 g of the rice batch. The dal was right.
-        val proposed = listOf(item("Basmati rice, cooked", "b1", 200.0, "rice"), item("Mix Dal", "d1", 150.0, "dal"))
-        val logged = listOf(item("Boiled Rice", "r1", 150.0, "rice"), item("Mix Dal", "d1", 150.0, "dal"))
-        AiMemory.learnFromReview(proposed, logged)
-        // Later, an AI entry's amount fixed on Today.
-        val old = LogEntry("x", "2026-11-16", "Dinner", "food", "w1", "High-protein wrap", "pc", 1.0, 127.0, 7.4, null, source = "ai")
-        AiMemory.learnFromEdit(old, old.copy(qty = 2.0))
-        val logs = (1..5).map { LogEntry("l$it", "2026-11-1$it", "Dinner", "food", "w1", "High-protein wrap", "pc", 2.0, 254.0, 14.8, null) }
-        val hints = AiMemory.hints(logs, java.time.LocalDate.of(2026, 11, 16))
-        assertEquals("High-protein wrap: 2 pc, not 1 pc", hints[0]) // newest first
-        assertEquals("\"rice\" is Boiled Rice (150 g), not Basmati rice, cooked (200 g)", hints[1])
-        assertTrue(hints.none { "Mix Dal" in it }) // unchanged items teach nothing
-        assertTrue(hints.any { it.startsWith("High-protein wrap: usually 2 pc") })
+    private fun item(name: String, id: String, qty: Double, said: String, unit: String = "g") =
+        ResolvedItem(name, "food", id, unit, qty, null, "typical", null, "medium", said)
+
+    private fun fresh() { AiMemory.init(context); context.getSharedPreferences("ai_memory", 0).edit().clear().commit() }
+
+    @Test fun fixesMatchesAndRepeats() {
+        fresh()
+        // The photo said 200 g basmati; it was 150 g of the rice batch. The dal was right (their own Mix Dal).
+        AiMemory.learnFromReview(
+            listOf(item("Basmati rice, cooked", "b1", 200.0, "rice"), item("Mix Dal", "d1", 150.0, "dal")),
+            listOf(item("Boiled Rice", "r1", 150.0, "rice"), item("Mix Dal", "d1", 150.0, "dal")), "Dinner",
+        )
+        val m = AiMemory.all().associateBy { it.kind + ":" + it.line }
+        assertTrue(m.keys.any { it == "fix:\"rice\" is Boiled Rice (150 g), not Basmati rice, cooked (200 g)" })
+        assertTrue(m.keys.any { it == "match:\"dal\" is their Mix Dal (150 g)" })
+        // The same fix again strengthens it rather than adding a line; the latest amount wins.
+        AiMemory.learnFromReview(listOf(item("Basmati rice, cooked", "b1", 220.0, "rice")), listOf(item("Boiled Rice", "r1", 160.0, "rice")), "Dinner")
+        val rice = AiMemory.all().filter { it.kind == AiMemory.FIX && "Boiled Rice" in it.line }
+        assertEquals(1, rice.size)
+        assertEquals(2, rice.single().count)
+        assertTrue("160 g" in rice.single().line)
+        // A later fix for "dal" replaces the match.
+        AiMemory.learnFromReview(listOf(item("Mix Dal", "d1", 150.0, "dal")), listOf(item("Rajma Tadka", "k1", 200.0, "dal")), "Dinner")
+        assertTrue(AiMemory.all().none { it.kind == AiMemory.MATCH && "Mix Dal" in it.line })
+    }
+
+    @Test fun hintsPickWhatFitsTheRequest() {
+        fresh()
+        val day = 86_400_000L
+        val now = 100 * day
+        AiMemory.learnFromReview(listOf(item("Basmati rice, cooked", "b1", 200.0, "rice")), listOf(item("Boiled Rice", "r1", 150.0, "rice")), "Dinner")
+        // Thirty newer memories about other things (the old way, "latest 25", would drop the rice).
+        repeat(30) { i -> AiMemory.learnFromReview(listOf(item("Food$i", "x$i", 100.0, "thing$i")), listOf(item("Other$i", "y$i", 50.0, "thing$i")), "Lunch") }
+        val hints = AiMemory.hints(emptyList(), query = "2 katori rice and dal", meal = "Dinner", now = now)
+        assertTrue(hints.first().contains("Boiled Rice"))
+        // Usual amounts at that meal, and the fridge.
+        val logs = (1..5).map { LogEntry("l$it", "2026-11-1$it", "Dinner", "food", "w1", "High-protein wrap", "pc", 2.0, 254.0, 14.8, null) } +
+            (1..4).map { LogEntry("m$it", "2026-11-1$it", "Breakfast", "food", "o1", "Oats", "g", 40.0, 150.0, 5.0, null) }
+        val h2 = AiMemory.hints(logs, query = null, meal = "Dinner", fridge = listOf("Boiled Rice (680 g left)"), today = java.time.LocalDate.of(2026, 11, 16))
+        assertTrue(h2.any { it == "At dinner: High-protein wrap, usually 2 pc (5× in 2 months)" })
+        assertTrue(h2.none { "Oats" in it }) // a breakfast food isn't a dinner hint
+        assertTrue(h2.any { it.startsWith("Cooked and in their fridge now") && "Boiled Rice (680 g left)" in it })
+    }
+
+    @Test fun oldCorrectionsCarryOver() {
+        fresh()
+        context.getSharedPreferences("ai_memory", 0).edit().putString("corrections", """[{"at":5,"line":"High-protein wrap: 2 pc, not 1 pc"}]""").commit()
+        val all = AiMemory.all()
+        assertEquals(1, all.size)
+        assertEquals(AiMemory.FIX, all.single().kind)
+        assertTrue("wrap" in all.single().words)
     }
 }

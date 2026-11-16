@@ -25,6 +25,12 @@ data class Release(val version: String, val date: String, val changes: List<Stri
  */
 val CHANGELOG = listOf(
     Release(
+        "0.9.41", "16 Nov 2026",
+        listOf(
+            "Smarter memory for Shoku AI: keeps up to 500 things it learned (your corrections, and matches to your own foods you kept); the same correction again makes it stronger; each request gets the memories that fit it (words you typed, the same meal), your usual amounts at that meal and what's cooked in your fridge",
+        ),
+    ),
+    Release(
         "0.9.4", "16 Nov 2026",
         listOf(
             "Meal photos: a plate you log with a photo keeps a smaller copy of the photo (\"Save photo with the meal\", on by default); a camera icon on those entries opens it, and you can swipe through all your meal photos (also from Insights › Meal photos)",

@@ -1,5 +1,6 @@
 package app.shoku.ui.add
 
+import app.shoku.domain.fridgeBatches
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.shoku.data.ShokuRepository
@@ -479,6 +480,20 @@ class AddViewModel(
         pendingPhotos = emptyList()
     }
 
+    /** What Shoku remembers that fits this request: [query] (typed or noted), this meal, the fridge. */
+    private fun memoryHints(lib: Library, query: String?): List<String> {
+        val logs = latestLogs.value
+        val batchLogs = logs.filter { it.refType == RefType.BATCH && !it.deleted }
+        // Batches in the fridge, with what's left: usually what's on the plate.
+        val fridge = lib.fridgeBatches(date, logs).map { b ->
+            val m = lib.batchMetrics(b)
+            val left = batchConsumption(m, b.id, batchLogs).fractionLeft(m)
+            val fq = b.finalQty
+            b.dishName + if (fq != null && b.finalUnit != null) " (${Math.round(left * fq)} ${b.finalUnit} left)" else ""
+        }
+        return app.shoku.data.ai.AiMemory.hints(logs, query, meal.value, fridge, date)
+    }
+
     /** The plate photos of the review being shown, saved with the entries when they're logged. */
     private var pendingPhotos: List<String> = emptyList()
     /** What the AI proposed in that review, to learn from what was changed before logging. */
@@ -499,7 +514,7 @@ class AddViewModel(
         runCatching {
             val lib = currentLibrary()
             val keys = aiClient.libraryKeys(lib, extra = aiClient.referenceCandidates(text, reference, lib))
-            val result = aiClient.meal(text, keys, app.shoku.data.ai.AiMemory.hints(latestLogs.value))
+            val result = aiClient.meal(text, keys, memoryHints(lib, text))
             AiState.Review("Check before logging", aiClient.resolve(result.items, keys, lib, byEye = false).also { proposed = it; pendingPhotos = emptyList() })
         }.onSuccess { ai.value = it }.onFailure { ai.value = aiFailure(it) }
     }
@@ -510,7 +525,7 @@ class AddViewModel(
         runCatching {
             val lib = currentLibrary()
             val keys = aiClient.libraryKeys(lib, extra = note?.let { aiClient.referenceCandidates(it, reference, lib) }.orEmpty())
-            val result = aiClient.plate(photos, note?.takeIf { it.isNotBlank() }, keys, app.shoku.data.ai.AiMemory.hints(latestLogs.value))
+            val result = aiClient.plate(photos, note?.takeIf { it.isNotBlank() }, keys, memoryHints(lib, note))
             AiState.Review("Estimated from the photo", aiClient.resolve(result.items, keys, lib, byEye = true).also {
                 proposed = it
                 pendingPhotos = if (app.shoku.data.PhotoStore.saveWithMeal) photos else emptyList()
@@ -552,7 +567,7 @@ class AddViewModel(
     fun logAi(items: List<ResolvedItem>, status: String) = viewModelScope.launch {
         val now = System.currentTimeMillis()
         // Learn from what was changed in the review; keep the plate photos with what was logged.
-        app.shoku.data.ai.AiMemory.learnFromReview(proposed, items)
+        app.shoku.data.ai.AiMemory.learnFromReview(proposed, items, meal.value)
         val photoNames = pendingPhotos.takeIf { it.isNotEmpty() }?.let { ps ->
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { ps.map { app.shoku.data.PhotoStore.save(it) } }.joinToString(",")
         }
