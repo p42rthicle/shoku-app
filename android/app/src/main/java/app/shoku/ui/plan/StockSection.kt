@@ -1,5 +1,7 @@
 package app.shoku.ui.plan
 
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -264,6 +266,8 @@ fun StockItemEditor(
     units: List<Pair<String, Double>> = emptyList(),
     /** For a food (creatine added as one): make it a supplement instead. */
     onMoveToSupplements: (() -> Unit)? = null,
+    /** Opens the food itself (its editor: name, values, units). */
+    onEditFood: (() -> Unit)? = null,
 ) {
     val i = level.item
     val choices = units.ifEmpty { listOf(i.unit to 1.0) }
@@ -279,7 +283,17 @@ fun StockItemEditor(
             Modifier.padding(horizontal = 20.dp).navigationBarsPadding().imePadding().verticalScroll(rememberScrollState()).padding(bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text(i.name, style = MaterialTheme.typography.headlineSmall)
+            // The title opens the food (a small edit icon says so).
+            Row(
+                Modifier.fillMaxWidth().clip(ShokuShapes.Button).then(if (onEditFood != null) Modifier.clickable(onClick = onEditFood) else Modifier),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(i.name, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f, fill = false))
+                if (onEditFood != null) {
+                    Spacer(Modifier.width(8.dp))
+                    androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.Edit, "Edit food", tint = ShokuColors.Muted, modifier = Modifier.size(20.dp))
+                }
+            }
             level.perDay?.let { Text("Uses about ${formatUnitQty(Math.round(it * 10) / 10.0, i.unit)} a day", style = MaterialTheme.typography.bodySmall, color = ShokuColors.Muted) }
             SwitchRow("Track the amount", if (tracked) "Goes down as you eat and cook" else "Status only: have / low / out (for spices)", tracked, { tracked = it })
             if (tracked && i.supplementId == null) {
@@ -288,11 +302,18 @@ fun StockItemEditor(
                     LabeledField("Buy below", low, { low = it }, Modifier.weight(1f), numeric = true, suffix = choices[unitIdx].first)
                 }
                 if (choices.size > 1) {
-                    // Picked the wrong unit when adding? Choose the right one: the numbers stay, their unit changes.
+                    // Show the amount in another unit: 1520 g = 38 pc. The numbers convert; what's saved is the same.
                     Text("Counted in", style = MaterialTheme.typography.titleSmall, color = ShokuColors.Muted)
                     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        choices.forEachIndexed { k, (label, _) ->
-                            Box(Modifier.clip(CircleShape).clickable { unitIdx = k }) { StatusChip(label, if (k == unitIdx) ChipStyle.Filled else ChipStyle.Tinted) }
+                        choices.forEachIndexed { k, (label, size) ->
+                            Box(Modifier.clip(CircleShape).clickable {
+                                if (k != unitIdx) {
+                                    val from = choices[unitIdx].second
+                                    fun conv(t: String) = t.toAmount()?.let { formatQty(Math.round(it * from / size * 10) / 10.0) } ?: t
+                                    count = conv(count); low = conv(low)
+                                    unitIdx = k
+                                }
+                            }) { StatusChip(label, if (k == unitIdx) ChipStyle.Filled else ChipStyle.Tinted) }
                         }
                     }
                     if (factor != 1.0) count.toAmount()?.let { n ->
@@ -338,7 +359,7 @@ fun StockItemEditor(
             if (onMoveToSupplements != null) app.shoku.ui.components.SecondaryButton("It's a supplement: move to Supplements", onClick = onMoveToSupplements)
             PrimaryButton("Save", onClick = {
                 val bb = bestBefore.trim().takeIf { runCatching { LocalDate.parse(it) }.isSuccess }
-                val newCount = count.toAmount()?.times(factor)?.takeIf { tracked && it >= 0 && (level.qty == null || Math.abs(it - level.qty) > 0.05) }
+                val newCount = count.toAmount()?.times(factor)?.takeIf { tracked && it >= 0 && (level.qty == null || Math.abs(it - level.qty) > 0.05 * factor + 0.05) } // shown in pc, 38 × 39.9 isn't a recount
                 onSave(i.copy(place = place, lowAt = low.toAmount()?.times(factor), bestBefore = bb, tracked = tracked, countQty = i.countQty ?: newCount), newCount)
             })
             var confirm by remember { mutableStateOf(false) }

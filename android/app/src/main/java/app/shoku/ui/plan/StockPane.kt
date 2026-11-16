@@ -18,6 +18,8 @@ class StockUi {
     var searching by mutableStateOf(false)
     var saying by mutableStateOf(false)
     var open by mutableStateOf<StockItem?>(null)
+    /** A stock card's food to open in the food editor (then back to the card). */
+    var editFood by mutableStateOf<StockItem?>(null)
     /** A food stock item being turned into a supplement. */
     var moving by mutableStateOf<StockItem?>(null)
 }
@@ -120,7 +122,11 @@ fun StockSheets(vm: PlanViewModel, ui: StockUi) {
     ui.open?.let { item ->
         stock.levels.firstOrNull { it.item.id == item.id }?.let { level ->
             StockItemEditor(
-                level, onSave = { i, n -> vm.saveStock(i, n); ui.open = null }, onDelete = { vm.deleteStock(it); ui.open = null }, onDismiss = { ui.open = null },
+                level,
+                onSave = { i, n -> vm.saveStock(i, n); ui.open = null; app.shoku.ui.search.SearchReturn.go() },
+                onDelete = { vm.deleteStock(it); ui.open = null; app.shoku.ui.search.SearchReturn.go() },
+                onDismiss = { ui.open = null; app.shoku.ui.search.SearchReturn.go() },
+                onEditFood = item.foodId?.takeIf { lib?.foods?.containsKey(it) == true }?.let { { ui.editFood = item; ui.open = null } },
                 units = item.foodId?.let { stock.units[it] }.orEmpty(),
                 onMoveToSupplements = item.foodId?.takeIf { lib?.foods?.containsKey(it) == true }?.let { { ui.moving = item; ui.open = null } },
             )

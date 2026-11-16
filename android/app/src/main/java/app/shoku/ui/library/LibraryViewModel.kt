@@ -130,6 +130,7 @@ class LibraryViewModel(private val repo: ShokuRepository, val reference: app.sho
     fun saveFood(food: Food, updatePast: Boolean, done: (Int) -> Unit = {}) = viewModelScope.launch { done(repo.saveFood(food, updatePast)) }
     fun savePortions(rows: List<app.shoku.data.db.FoodPortion>) = viewModelScope.launch { repo.savePortions(rows) }
     fun archiveFood(food: Food) = viewModelScope.launch { repo.setFoodArchived(food, true) }
+    fun deleteFood(food: Food) = viewModelScope.launch { repo.deleteFood(food) }
     fun unarchiveFood(food: Food) = viewModelScope.launch { repo.setFoodArchived(food, false) }
     var showAllFoods by mutableStateOf(false)
     var showArchivedFoods by mutableStateOf(false)

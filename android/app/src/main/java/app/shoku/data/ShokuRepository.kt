@@ -158,6 +158,15 @@ class ShokuRepository(private val db: ShokuDatabase, scope: CoroutineScope) {
     }
 
     suspend fun setDishArchived(dish: Dish, archived: Boolean) = lib.upsertDishes(listOf(dish.copy(archived = archived, updatedAt = System.currentTimeMillis())))
+    /** Removes a food that nothing uses (its units too); the caller checks it isn't used. */
+    suspend fun deleteFood(food: Food) = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        db.withTransaction {
+            lib.upsertFoods(listOf(food.copy(deleted = true, updatedAt = now)))
+            lib.upsertPortions(lib.allPortions().filter { it.foodId == food.id && !it.deleted }.map { it.copy(deleted = true, updatedAt = now) })
+        }
+    }
+
     suspend fun setFoodArchived(food: Food, archived: Boolean) = lib.upsertFoods(listOf(food.copy(archived = archived, updatedAt = System.currentTimeMillis())))
 
     /**

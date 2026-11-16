@@ -156,9 +156,22 @@ private fun LibraryList(
     }
     // Stock (what's at home), with its own sheets.
     val stockUi = remember { app.shoku.ui.plan.StockUi() }
+    // Opened from a stock card: closing the food goes back to that card; opened from search: back to the search.
+    var foodFromStock by remember { mutableStateOf<app.shoku.data.db.StockItem?>(null) }
+    fun closeFood() {
+        editingFood = null
+        val card = foodFromStock
+        foodFromStock = null
+        if (card != null) stockUi.open = card else app.shoku.ui.search.SearchReturn.go()
+    }
     val stock by planVm.stockView.collectAsState()
     val stockBusy by planVm.busy.collectAsState()
     val stockScan = app.shoku.ui.plan.rememberStockScan(planVm)
+    androidx.compose.runtime.LaunchedEffect(stockUi.editFood, library) {
+        val item = stockUi.editFood ?: return@LaunchedEffect
+        library.foods[item.foodId]?.let { editingFood = it; foodFromStock = item }
+        stockUi.editFood = null
+    }
     androidx.compose.runtime.LaunchedEffect(planVm.openStockRequest, stock) {
         val id = planVm.openStockRequest ?: return@LaunchedEffect
         stock.levels.firstOrNull { it.item.id == id }?.let { stockUi.open = it.item; planVm.openStockRequest = null }
@@ -324,11 +337,22 @@ private fun LibraryList(
                         else -> toast("Saved")
                     }
                 }
-                editingFood = null
+                closeFood()
             },
-            onArchive = { vm.archiveFood(f); editingFood = null; undoToast("${f.name} archived") { vm.unarchiveFood(f) } },
-            onUnarchive = { vm.unarchiveFood(f); editingFood = null; toast("${f.name} is back") },
-            onDismiss = { editingFood = null },
+            onArchive = { vm.archiveFood(f); closeFood(); undoToast("${f.name} archived") { vm.unarchiveFood(f) } },
+            onUnarchive = { vm.unarchiveFood(f); closeFood(); toast("${f.name} is back") },
+            onDelete = run {
+                // Only a food nothing uses: never logged, in no dish, batch, meal plan or stock, no family under it.
+                val plan = planVm.plan.value
+                val unused = data.usageCount("food", f.id) == 0 &&
+                    library.dishIngredients.values.none { l -> l.any { it.refType == "food" && it.refId == f.id && !it.deleted } } &&
+                    library.batchIngredients.values.none { l -> l.any { it.refType == "food" && it.refId == f.id && !it.deleted } } &&
+                    plan.items.none { it.refType == "food" && it.refId == f.id && !it.deleted } &&
+                    stock.levels.none { it.item.foodId == f.id } &&
+                    library.foods.values.none { it.parentId == f.id && !it.deleted }
+                if (unused) ({ vm.deleteFood(f); closeFood(); toast("${f.name} deleted") }) else null
+            },
+            onDismiss = { closeFood() },
         )
     }
     if (creatingFood) {

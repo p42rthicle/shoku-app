@@ -95,10 +95,10 @@ class MergeFoodsTest {
         assertTrue("Aldi Goldähren PROTEIN WRAPS" in kept.aliases)
         assertTrue(foods.single { it.id == "w2" }.deleted)
 
-        // Units: 1 pc = 39.9 g by calories, the label's wrap = 40 g; the wrong 60 g unit is gone.
+        // Units: 1 pc = 39.9 g by calories; the label's 40 g "wrap" isn't a second unit; the wrong 60 g one is gone.
         val units = db.library().allPortions().filter { !it.deleted && it.foodId == "w1" }.associate { it.label to it.qty }
         assertEquals(39.9, units["pc"]!!, 0.05)
-        assertEquals(40.0, units["wrap"]!!, 0.01)
+        assertFalse("wrap" in units) // the same amount as "pc": one unit, not two
         assertFalse("g" in units)
 
         // History: every entry still there with its numbers and unit, all on the one food.

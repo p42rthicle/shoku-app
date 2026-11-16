@@ -76,6 +76,8 @@ fun FoodEditor(
     inheritedFrom: String? = null,
     onSavePortions: ((List<FoodPortion>) -> Unit)? = null,
     onUnarchive: (() -> Unit)? = null,
+    /** Only for a food used nowhere (never logged, in no dish, batch, plan or stock): removes it for good. */
+    onDelete: (() -> Unit)? = null,
     /** Units worth offering (the pack's serving), added only if tapped. */
     suggested: List<FoodPortion> = emptyList(),
 ) {
@@ -102,9 +104,33 @@ fun FoodEditor(
 
     val valid = name.isNotBlank() && unit.isNotBlank() && (base.toAmount() ?: 0.0) > 0 && kcal.toAmount() != null && protein.toAmount() != null
 
+    // Unsaved edits: Back or swiping the sheet away asks first ("I removed a unit and lost it").
+    val start = remember { listOf(name, brand, unit, base, kcal, protein, fibre, carbs, fat, aliases, parentId.toString(), units.toString()) }
+    val dirty = listOf(name, brand, unit, base, kcal, protein, fibre, carbs, fat, aliases, parentId.toString(), units.toString()) != start
+    val dirtyNow by androidx.compose.runtime.rememberUpdatedState(dirty)
+    var askSave by remember { mutableStateOf(false) }
+    val saveRef = remember { arrayOfNulls<() -> Unit>(1) }
+    if (askSave) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { askSave = false },
+            containerColor = ShokuColors.Paper,
+            title = { Text("Save changes?") },
+            text = { Text(if (valid) "You changed this food but didn't save." else "You changed this food, but it still needs a name, calories and protein.", style = MaterialTheme.typography.bodyMedium) },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = { askSave = false; if (valid) saveRef[0]?.invoke() }) { Text(if (valid) "Save" else "Keep editing", color = ShokuColors.Ink) }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { askSave = false; onDismiss() }) { Text("Discard", color = ShokuColors.Muted) }
+            },
+        )
+    }
+
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        onDismissRequest = { if (dirtyNow) askSave = true else onDismiss() },
+        sheetState = rememberModalBottomSheetState(
+            skipPartiallyExpanded = true,
+            confirmValueChange = { v -> if (v == androidx.compose.material3.SheetValue.Hidden && dirtyNow) { askSave = true; false } else true },
+        ),
         containerColor = ShokuColors.Paper,
         shape = ShokuShapes.Sheet,
     ) {
@@ -213,8 +239,9 @@ fun FoodEditor(
                 food == null -> "Add food"
                 brandVersion -> "Save ${brand.trim()}'s version"
                 else -> "Save"
-            }, onClick = {
-                if (!valid) return@PrimaryButton
+            }, onClick = { saveRef[0]?.invoke() })
+            saveRef[0] = save@{
+                if (!valid) return@save
                 val saved = (food ?: prefill ?: Food(id = ShokuRepository.newId(), name = "", unit = "", baseQty = 1.0, kcal = null, protein = null, fibre = null)).copy(
                     id = food?.id ?: prefill?.id ?: ShokuRepository.newId(),
                     name = name.trim(), unit = unit, baseQty = base.toAmount()!!,
@@ -238,7 +265,7 @@ fun FoodEditor(
                     if (kept.isNotEmpty() || removed.isNotEmpty()) save(kept + removed)
                 }
                 onSave(saved, updatePast && !brandVersion)
-            })
+            }
             if (food?.archived == true && onUnarchive != null) {
                 Text(
                     "Archived: hidden from Add and search. Tap to bring it back.", style = MaterialTheme.typography.labelLarge, color = ShokuColors.Ink,
@@ -249,6 +276,15 @@ fun FoodEditor(
                     "Archive this food",
                     style = MaterialTheme.typography.labelLarge, color = ShokuColors.Muted,
                     modifier = Modifier.fillMaxWidth().clip(ShokuShapes.Button).clickable(onClick = onArchive).padding(vertical = 12.dp),
+                    textAlign = TextAlign.Center,
+                )
+            }
+            if (onDelete != null) {
+                var confirm by remember { mutableStateOf(false) }
+                Text(
+                    if (confirm) "Tap again to delete it" else "Delete this food (it isn't used anywhere)",
+                    style = MaterialTheme.typography.labelLarge, color = if (confirm) ShokuColors.Over else ShokuColors.Muted,
+                    modifier = Modifier.fillMaxWidth().clip(ShokuShapes.Button).clickable { if (confirm) onDelete() else confirm = true }.padding(vertical = 12.dp),
                     textAlign = TextAlign.Center,
                 )
             }

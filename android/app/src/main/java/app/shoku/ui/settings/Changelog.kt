@@ -25,14 +25,14 @@ data class Release(val version: String, val date: String, val changes: List<Stri
  */
 val CHANGELOG = listOf(
     Release(
-        "0.9.2", "16 Nov 2026",
+        "0.9.3", "16 Nov 2026",
         listOf(
-            "Today's plan uses what you cooked: your rice batch stands in for the template's rice, and the sabzi slot takes a curry batch (never rice); each meal on the card lists what it will actually add, fridge batches marked",
-            "Fixed a freeze when logging with AI: the loader shows at once, the lookups run in the background, and a second tap is ignored",
-            "Searching is much faster everywhere",
-            "\"Usual for…\" and search favour what you've eaten lately, not habits from months ago",
-            "Supplements: tell it how many you had and on which day, and it takes off every dose you've ticked since, then says how long the stock lasts and when to order (a week ahead)",
-            "Today shows a \"Running low\" card when a supplement runs out within two weeks",
+            "Back from anything you opened in Search (a food, a stock item, a dish) returns to your search, with the same words and scroll",
+            "A stock item's \"Counted in\" converts the amount: 1520 g shows as 38 pc",
+            "Tap a stock item's name (or the pencil) to edit the food; closing it returns to the stock item",
+            "Leaving a food with unsaved changes asks \"Save changes?\" instead of losing them",
+            "A food that isn't used anywhere can be deleted, not just archived",
+            "Merging no longer makes two units for the same amount (a 40 g \"wrap\" next to a 40 g \"pc\")",
             "Pack photo: for packs with no barcode match or no label (a creatine tub), take a photo of any side and Shoku AI fills in the brand, the name and typical values (or the label's, if it shows one). In Add, every search sheet and Library",
             "Settings › Find duplicate foods: foods that are in your library twice, with the one to keep (logged most, or most complete) and why; merging keeps past entries as they were, pointing to the one food, and moves dishes, plans and stock with it",
             "Merging picks the cleanest name (brand kept in its own field), fills every missing value from the other copies, keeps barcodes and units, and shows the result before you merge; stock stays as it was",
@@ -44,6 +44,17 @@ val CHANGELOG = listOf(
             "Adding to stock asks whether it's a food or a supplement (creatine, vitamins and the like start on Supplement) and where it goes (fridge, freezer, pantry, spices)",
             "Something already in stock as a food can move to Supplements from its stock card, keeping the amount you have",
             "A label photo with no nutrition table works out what the product is instead of failing",
+        ),
+    ),
+    Release(
+        "0.9.2", "16 Nov 2026",
+        listOf(
+            "Today's plan uses what you cooked: your rice batch stands in for the template's rice, and the sabzi slot takes a curry batch (never rice); each meal on the card lists what it will actually add, fridge batches marked",
+            "Fixed a freeze when logging with AI: the loader shows at once, the lookups run in the background, and a second tap is ignored",
+            "Searching is much faster everywhere",
+            "\"Usual for…\" and search favour what you've eaten lately, not habits from months ago",
+            "Supplements: tell it how many you had and on which day, and it takes off every dose you've ticked since, then says how long the stock lasts and when to order (a week ahead)",
+            "Today shows a \"Running low\" card when a supplement runs out within two weeks",
             "Today's plan folds away with the arrow by its title; folded, it's one line with an \"Add as per plan\" chip (it stays folded until you open it)",
         ),
     ),

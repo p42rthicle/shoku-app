@@ -211,14 +211,17 @@ object Duplicates {
         val factors = all.associate { it.id to factor(it, valuesFrom) }
         // Units: the values food's own first, then each member's, converted; plus "pc" for a member counted in pieces.
         val portions = ArrayList<FoodPortion>()
+        // Same amount under another name ("wrap" 40 g next to "pc" 39.9 g) is one unit, not two.
         fun add(label: String, qty: Double) {
-            if (label == food.unit || qty <= 0 || portions.any { it.label == label }) return
+            if (label == food.unit || qty <= 0 || portions.any { it.label == label || Math.abs(it.qty - qty) <= 0.02 * Math.max(it.qty, qty) }) return
             portions += FoodPortion(java.util.UUID.randomUUID().toString(), keep.id, label, Math.round(qty * 10) / 10.0, now)
         }
-        (listOf(valuesFrom) + all.filter { it.id != valuesFrom.id }).forEach { f ->
+        val ordered = listOf(valuesFrom) + all.filter { it.id != valuesFrom.id }
+        // First the units past entries were logged in ("pc" for the wrap), so they keep working.
+        ordered.forEach { f -> val k = factors[f.id] ?: return@forEach; if (f.unit != food.unit) add(f.unit, k) }
+        ordered.forEach { f ->
             val k = factors[f.id] ?: return@forEach
             library.portions[f.id].orEmpty().forEach { p -> add(p.label, p.qty * k) }
-            if (f.unit != food.unit) add(f.unit, k)
         }
         return Merge(food, portions, others, factors)
     }

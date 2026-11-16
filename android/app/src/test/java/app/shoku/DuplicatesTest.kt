@@ -42,7 +42,7 @@ class DuplicatesTest {
         assertEquals(318.0, m.food.kcal!!, 0.01)
         // One piece is ~40 g by calories (127 / 3.18); the old "1 pc = 60 g" unit is dropped.
         assertEquals(39.9, m.portions.first { it.label == "pc" }.qty, 0.05)
-        assertEquals(40.0, m.portions.first { it.label == "wrap" }.qty, 0.01)
+        assertTrue(m.portions.none { it.label == "wrap" }) // 40 g is the same as the 39.9 g piece
         assertTrue(m.portions.none { it.label == "g" })
         assertTrue("Protein Wraps" in m.food.aliases)
         assertEquals(listOf("w2"), m.gone.map { it.id })

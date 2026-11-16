@@ -86,6 +86,27 @@ fun GlobalSearchButton(onClick: () -> Unit) {
     }
 }
 
+/**
+ * What the search screen keeps while you look at a result (query, open sections, scroll), so Back from the
+ * result returns to the same search.
+ */
+class SearchUi {
+    var query by mutableStateOf("")
+    var openSections by mutableStateOf(emptySet<String>())
+    val list = androidx.compose.foundation.lazy.LazyListState()
+    fun reset() { query = ""; openSections = emptySet(); list.requestScrollToItem(0) }
+}
+
+/**
+ * Set when search opened something (a food, the stock card, a dish): closing it goes back to the search
+ * instead of staying in the Library. Cleared when you switch tabs yourself.
+ */
+object SearchReturn {
+    var action: (() -> Unit)? = null
+    /** Back to the search if it opened what's closing; true if it did. */
+    fun go(): Boolean { val a = action ?: return false; action = null; a(); return true }
+}
+
 /** Where a search result leads. */
 class SearchActions(
     val openDay: (LocalDate) -> Unit,
@@ -107,19 +128,20 @@ private data class Hit(val title: String, val tag: String?, val subtitle: String
  * templates, supplements, the food databases and Open Food Facts. Tapping a result opens it where it lives.
  */
 @Composable
-fun GlobalSearchScreen(library: Library?, planVm: app.shoku.ui.plan.PlanViewModel, actions: SearchActions, onClose: () -> Unit) {
+fun GlobalSearchScreen(library: Library?, planVm: app.shoku.ui.plan.PlanViewModel, actions: SearchActions, onClose: () -> Unit, ui: SearchUi = remember { SearchUi() }) {
     BackHandler(onBack = onClose)
     val app = LocalContext.current.applicationContext as ShokuApplication
     val entries by app.repository.allEntries.collectAsState(initial = emptyList())
     val stock by planVm.stockView.collectAsState()
     val plan by planVm.plan.collectAsState()
     val supps by planVm.supplements.collectAsState()
-    var query by remember { mutableStateOf("") }
+    var query by ui::query
     var online by remember { mutableStateOf<List<ScannedProduct>>(emptyList()) }
     var onlineLoading by remember { mutableStateOf(false) }
-    var openSections by remember { mutableStateOf(emptySet<String>()) }
+    var openSections by ui::openSections
     val focus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    // A new search starts typing; coming back to one shows the results where you left them.
+    LaunchedEffect(Unit) { if (query.isEmpty()) runCatching { focus.requestFocus() } }
     // Open Food Facts allows about 10 searches a minute: wait for a pause in typing.
     LaunchedEffect(query) {
         val q = query.trim()
@@ -200,6 +222,7 @@ fun GlobalSearchScreen(library: Library?, planVm: app.shoku.ui.plan.PlanViewMode
         }
         LazyColumn(
             Modifier.weight(1f),
+            state = ui.list,
             contentPadding = PaddingValues(horizontal = ShokuSpacing.Screen, vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(ShokuSpacing.Gap),
         ) {

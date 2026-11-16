@@ -114,6 +114,9 @@ fun ShokuApp() {
     var showDesign by rememberSaveable { mutableStateOf(false) }
     var showGuide by rememberSaveable { mutableStateOf(false) }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
+    // The search's query and scroll survive a trip to a result and back.
+    val searchUi = remember { app.shoku.ui.search.SearchUi() }
+    fun openSearch() { app.shoku.ui.search.SearchReturn.action = null; searchUi.reset(); searchOpen = true }
     // Coming back after a while starts on today, not on a day looked at earlier.
     var leftAt by remember { mutableStateOf(0L) }
     androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_STOP) { leftAt = System.currentTimeMillis() }
@@ -145,7 +148,7 @@ fun ShokuApp() {
                 planVm.menuOpen = r.arg == "menu"
             }
             "stock" -> { addTarget = null; libraryVm.openStock(); tab = Tab.Library }
-            "search" -> { addTarget = null; searchOpen = true }
+            "search" -> { addTarget = null; openSearch() }
             "library" -> { addTarget = null; tab = Tab.Library; libraryVm.backToList(); r.arg?.let { libraryVm.query = it } }
             "insights" -> { addTarget = null; tab = Tab.Insights }
             "cook" -> { addTarget = null; libraryVm.startCook(); tab = Tab.Library }
@@ -198,6 +201,7 @@ fun ShokuApp() {
                             NavigationBarItem(
                                 selected = tab == t,
                                 onClick = {
+                                    app.shoku.ui.search.SearchReturn.action = null // you went somewhere yourself
                                     if (t == Tab.Library && tab == Tab.Library) libraryVm.backToList()
                                     go(t)
                                     showDesign = false
@@ -250,7 +254,7 @@ fun ShokuApp() {
                         libraryVm.startCook(); go(Tab.Library)
                     },
                     onLogBatch = { d, id -> addTarget = AddTarget(d, mealForNow(d), batchId = id) },
-                    onSearch = { searchOpen = true },
+                    onSearch = { openSearch() },
                     onOpenSupplements = { planVm.menuOpen = false; planVm.section = 1; go(Tab.Plan) },
                     onOpenItem = { type, id ->
                         libraryVm.backToList()
@@ -268,23 +272,31 @@ fun ShokuApp() {
         }
 
         if (searchOpen) {
-            // Every result closes search and opens where the thing lives.
-            fun leave(then: () -> Unit) { searchOpen = false; then() }
+            // Every result closes search and opens where the thing lives; closing that comes back here.
+            fun leave(then: () -> Unit) {
+                val from = tab
+                app.shoku.ui.search.SearchReturn.action = { go(from); searchOpen = true }
+                searchOpen = false
+                then()
+            }
+            fun leaveForGood(then: () -> Unit) { app.shoku.ui.search.SearchReturn.action = null; searchOpen = false; then() }
+            val backToSearchOr: (() -> Unit) -> () -> Unit = { fallback -> { if (!app.shoku.ui.search.SearchReturn.go()) fallback() } }
             Box(Modifier.fillMaxSize().enterRise()) { app.shoku.ui.search.GlobalSearchScreen(
                 library, planVm,
                 app.shoku.ui.search.SearchActions(
-                    openDay = { d -> leave { todayVm.setDate(d); go(Tab.Today) } },
+                    openDay = { d -> leaveForGood { todayVm.setDate(d); go(Tab.Today) } },
                     openFood = { id -> leave { libraryVm.backToList(); libraryVm.tab = app.shoku.ui.library.LibTab.Foods; libraryVm.editFoodRequest = id; go(Tab.Library) } },
-                    openDish = { id -> leave { libraryVm.backToList(); libraryVm.open(app.shoku.ui.library.LibRoute.DishDetail(id)); libraryVm.returnTo = { go(Tab.Today) }; go(Tab.Library) } },
-                    openBatch = { id -> leave { libraryVm.backToList(); libraryVm.open(app.shoku.ui.library.LibRoute.BatchDetail(id)); libraryVm.returnTo = { go(Tab.Today) }; go(Tab.Library) } },
+                    openDish = { id -> leave { libraryVm.backToList(); libraryVm.open(app.shoku.ui.library.LibRoute.DishDetail(id)); libraryVm.returnTo = backToSearchOr { go(Tab.Today) }; go(Tab.Library) } },
+                    openBatch = { id -> leave { libraryVm.backToList(); libraryVm.open(app.shoku.ui.library.LibRoute.BatchDetail(id)); libraryVm.returnTo = backToSearchOr { go(Tab.Today) }; go(Tab.Library) } },
                     openStock = { id -> leave { libraryVm.openStock(); planVm.openStockRequest = id; go(Tab.Library) } },
-                    openTemplate = { id -> leave { planVm.menuOpen = false; planVm.section = 0; planVm.editTemplateRequest = id; go(Tab.Plan) } },
-                    openSupplement = { id -> leave { planVm.menuOpen = false; planVm.section = 1; planVm.editSupplementRequest = id; go(Tab.Plan) } },
+                    openTemplate = { id -> leaveForGood { planVm.menuOpen = false; planVm.section = 0; planVm.editTemplateRequest = id; go(Tab.Plan) } },
+                    openSupplement = { id -> leaveForGood { planVm.menuOpen = false; planVm.section = 1; planVm.editSupplementRequest = id; go(Tab.Plan) } },
                     addReference = { r -> leave { libraryVm.addReference(r) { f -> libraryVm.backToList(); libraryVm.tab = app.shoku.ui.library.LibTab.Foods; libraryVm.editFoodRequest = f.id; go(Tab.Library) } } },
                     addOnline = { p -> leave { libraryVm.addOnline(p) { f -> libraryVm.backToList(); libraryVm.tab = app.shoku.ui.library.LibTab.Foods; libraryVm.editFoodRequest = f.id; go(Tab.Library) } } },
-                    log = { text -> leave { addTarget = AddTarget(LocalDate.now(), mealForNow(), query = text) } },
+                    log = { text -> leaveForGood { addTarget = AddTarget(LocalDate.now(), mealForNow(), query = text) } },
                 ),
-                onClose = { searchOpen = false },
+                onClose = { app.shoku.ui.search.SearchReturn.action = null; searchOpen = false },
+                ui = searchUi,
             ) }
         }
 
