@@ -37,6 +37,7 @@ val CHANGELOG = listOf(
             "A food you archived no longer hides it from the food databases; picking it brings it back",
             "Anything the AI estimates (plate photo, describe) is saved to your library when logged, so next time it's a normal match; past estimates were converted too",
             "AI keeps brands apart: \"Yadav chakli\" becomes Chakli with the brand Yadav; tap an item in the AI review to set or fix its brand",
+            "Today's plan uses what you cooked: your rice batch stands in for the template's rice, and the sabzi slot takes a curry batch (never rice); the card lists what's from the fridge",
             "Smaller download for shared builds (about 5 MB)",
         ),
     ),

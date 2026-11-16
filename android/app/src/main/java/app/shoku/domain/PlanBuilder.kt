@@ -29,17 +29,26 @@ data class PlanState(val templates: List<MealTemplate>, val items: List<Template
 fun Library.templateTotals(items: List<TemplateItem>): Nutrients =
     items.filter { it.refType != SLOT && it.refId != null }.fold(Nutrients.ZERO) { acc, i -> acc + (entryNutrients(i.refType, i.refId!!, i.unit, i.qty) ?: Nutrients.UNKNOWN) }
 
-/** The newest unfinished batch cooked in the last week that still has more than a bite left. */
-fun Library.fridgeBatch(date: LocalDate, logs: List<LogEntry>): Batch? {
+/** Staples cooked in bulk that stand in for a template's plain item ("Boiled rice" for "Cooked rice"). */
+private val STAPLE = Regex("""\b(rice|chawal|roti|chapati|chapatti|phulka|quinoa|pasta)\b""")
+
+/** The staple word of a batch ("rice" for "Boiled Rice"), or null for a sabzi, dal or curry. */
+fun Batch.stapleWord(): String? = STAPLE.find(searchKey(dishName))?.value
+
+/** Unfinished batches cooked by [date] that still have more than a bite left, newest first. */
+fun Library.fridgeBatches(date: LocalDate, logs: List<LogEntry>): List<Batch> {
     val batchLogs = logs.filter { it.refType == RefType.BATCH && !it.deleted }
     return batches.values
-        .filter { !it.finished && !it.deleted && it.date in date.minusDays(7).toString()..date.toString() }
+        .filter { !it.finished && !it.deleted && it.date <= date.toString() }
         .filter { b -> val m = batchMetrics(b); batchConsumption(m, b.id, batchLogs).fractionLeft(m) > 0.05 }
-        .maxByOrNull { it.date }
+        .sortedByDescending { it.date }
 }
 
-/** What adding a day's plan would log, and the slot items that had no batch to use. */
-data class PlannedDay(val entries: List<LogEntry>, val missingSlots: List<String>)
+/** The sabzi or dal for the plan's batch slot: the newest batch in the fridge that isn't a staple like rice. */
+fun Library.fridgeBatch(date: LocalDate, logs: List<LogEntry>): Batch? = fridgeBatches(date, logs).firstOrNull { it.stapleWord() == null }
+
+/** What adding a day's plan would log, the slot items that had no batch to use, and the batches it uses. */
+data class PlannedDay(val entries: List<LogEntry>, val missingSlots: List<String>, val fromFridge: List<String> = emptyList())
 
 /**
  * Entries for the plan of [date] as [status], skipping [skipMeals] (already logged or hidden).
@@ -55,7 +64,10 @@ fun Library.planEntries(
     /** Today-only choices: meal -> template id, or null to leave that meal out. */
     overrides: Map<String, String?> = emptyMap(),
 ): PlannedDay {
-    val batch = fridgeBatch(date, logs)
+    val fridge = fridgeBatches(date, logs)
+    val batch = fridge.firstOrNull { it.stapleWord() == null }
+    val staples = fridge.filter { it.stapleWord() != null }
+    val used = LinkedHashSet<String>()
     val missing = ArrayList<String>()
     val now = System.currentTimeMillis()
     var n = 0
@@ -63,10 +75,23 @@ fun Library.planEntries(
         val t = (if (meal in overrides) overrides[meal]?.let { id -> plan.templates.firstOrNull { it.id == id && !it.deleted } } else plan.templateFor(date.dayOfWeek.value, meal))
             ?: return@flatMap emptyList()
         plan.itemsOf(t.id).mapNotNull { item ->
-            val (type, id, unit, qty) = if (item.refType == SLOT) {
-                if (batch == null) { missing += item.label; return@mapNotNull null }
-                Quad(RefType.BATCH, batch.id, PortionMetrics.SERVING, item.qty)
-            } else Quad(item.refType, item.refId ?: return@mapNotNull null, item.unit, item.qty)
+            val staple = if (item.refType == RefType.FOOD) item.refId?.let { stapleFor(it, staples) } else null
+            val (type, id, unit, qty) = when {
+                item.refType == SLOT -> {
+                    if (batch == null) { missing += item.label; return@mapNotNull null }
+                    used += batch.dishName
+                    Quad(RefType.BATCH, batch.id, PortionMetrics.SERVING, item.qty)
+                }
+                // A staple you've cooked (your rice) stands in for the template's plain one, same amount by weight.
+                staple != null -> {
+                    val (b, grams) = staple.first to stapleGrams(item, staple.second)
+                    used += b.dishName
+                    val m = batchMetrics(b)
+                    if (grams != null && m.hasWeightBasis) Quad(RefType.BATCH, b.id, m.finalUnit!!, Math.round(grams).toDouble())
+                    else Quad(RefType.BATCH, b.id, PortionMetrics.SERVING, 1.0)
+                }
+                else -> Quad(item.refType, item.refId ?: return@mapNotNull null, item.unit, item.qty)
+            }
             val name = nameOf(type, id) ?: return@mapNotNull null
             val nut = entryNutrients(type, id, unit, qty)
             val generic = type == RefType.FOOD && foods[id]?.kind == FoodKind.GENERIC
@@ -78,7 +103,22 @@ fun Library.planEntries(
             )
         }
     }
-    return PlannedDay(entries, missing.distinct())
+    return PlannedDay(entries, missing.distinct(), used.toList())
+}
+
+/** The cooked staple batch matching a template food ("Cooked rice" -> your "Boiled Rice"), with its food. */
+private fun Library.stapleFor(foodId: String, staples: List<Batch>): Pair<Batch, app.shoku.data.db.Food>? {
+    if (staples.isEmpty()) return null
+    val f = foods[foodId] ?: return null
+    val words = searchKey(f.name).split(Regex("[^a-z]+")).toSet()
+    return staples.firstOrNull { it.stapleWord() in words }?.let { it to f }
+}
+
+/** The template item's amount as cooked grams (raw rice or pasta roughly triples when cooked), or null. */
+private fun Library.stapleGrams(item: TemplateItem, food: app.shoku.data.db.Food): Double? {
+    val inUnit = inFoodUnit(food.id, item.unit, item.qty) ?: return null
+    if (food.unit !in WEIGHT_UNITS) return null
+    return if ("raw" in searchKey(food.name)) inUnit * 2.8 else inUnit
 }
 
 private data class Quad(val type: String, val id: String, val unit: String, val qty: Double)

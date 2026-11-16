@@ -41,6 +41,25 @@ class PlanTest {
     }
 
     @Test
+    fun planUsesWhatYouCookedRiceForRiceAndSabziForTheSlot() {
+        val rice = Food("r", "Cooked rice", "g", 100.0, 130.0, 2.7, 0.4)
+        // Rice cooked today (weighed: 900 g, 6 servings) and a sabzi from yesterday; the rice is newer.
+        val riceBatch = Batch("br", null, "Boiled Rice", sat.toString(), 6.0, finalQty = 900.0, finalUnit = "g", totalKcal = 1170.0, totalProtein = 24.0, totalFibre = 3.0)
+        val gobhi = Batch("bg", null, "Crushed Gobhi Soya Paneer", sat.minusDays(1).toString(), 4.0, totalKcal = 800.0, totalProtein = 60.0, totalFibre = 16.0)
+        val l = Library(listOf(rice, paneer), emptyList(), emptyList(), listOf(riceBatch, gobhi), emptyList())
+        val p2 = PlanState(
+            listOf(MealTemplate("x", "Rice lunch", "Lunch")),
+            listOf(TemplateItem("a", "x", "food", "r", "", "g", 150.0), TemplateItem("b", "x", SLOT, null, "Sabzi", "serving", 1.0)),
+            (1..7).map { PlanSlot("$it|Lunch", it, "Lunch", "x") },
+        )
+        val day = l.planEntries(p2, sat, emptyList(), "planned", emptySet(), listOf("Lunch"))
+        assertEquals(listOf("Boiled Rice", "Crushed Gobhi Soya Paneer"), day.entries.map { it.name })
+        assertEquals("g", day.entries[0].unit) // the rice by weight, same amount as the template
+        assertEquals(150.0, day.entries[0].qty, 0.01)
+        assertEquals(listOf("Boiled Rice", "Crushed Gobhi Soya Paneer"), day.fromFridge)
+    }
+
+    @Test
     fun prepCountsChickenPaneerAndBatchServings() {
         val need = lib.prepNeeds(plan, sat.plusDays(2), 3) // Mon, Tue, Wed
         assertEquals(200.0, need.chickenG, 0.01)

@@ -754,6 +754,10 @@ private fun PlanCard(
                 }
             }
         }
+        if (p?.fromFridge?.isNotEmpty() == true) {
+            Spacer(Modifier.height(6.dp))
+            Text("From the fridge: ${p.fromFridge.joinToString(", ")}", style = MaterialTheme.typography.bodySmall, color = ShokuColors.Muted)
+        }
         if (p?.missingSlots?.isNotEmpty() == true) {
             Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
