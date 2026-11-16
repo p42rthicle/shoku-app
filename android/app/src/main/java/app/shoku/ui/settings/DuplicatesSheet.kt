@@ -34,7 +34,6 @@ import androidx.compose.ui.unit.dp
 import app.shoku.ShokuApplication
 import app.shoku.data.db.Food
 import app.shoku.domain.Duplicates
-import app.shoku.domain.Library
 import app.shoku.ui.components.ChipStyle
 import app.shoku.ui.components.PrimaryButton
 import app.shoku.ui.components.SecondaryButton
@@ -72,6 +71,7 @@ fun DuplicatesSheet(onDismiss: () -> Unit) {
     // Per group: which food to keep and whose numbers to use, when changed from the suggestion.
     val keepChoice = remember { mutableStateMapOf<String, String>() }
     val valuesChoice = remember { mutableStateMapOf<String, String>() }
+    val nameChoice = remember { mutableStateMapOf<String, String>() }
 
     androidx.compose.runtime.LaunchedEffect(data, ignored) {
         val d = data ?: return@LaunchedEffect
@@ -104,15 +104,18 @@ fun DuplicatesSheet(onDismiss: () -> Unit) {
                             val lib = data?.first ?: return@item
                             val keepId = keepChoice[g.key] ?: g.keep.food.id
                             val valuesId = valuesChoice[g.key] ?: g.valuesFrom.food.id
+                            val keep = g.members.first { it.food.id == keepId }.food
+                            val values = g.members.first { it.food.id == valuesId }.food
+                            val name = nameChoice[g.key] ?: Duplicates.bestName(g.members.map { it.food }, keep, values)
+                            val plan = remember(g.key, keepId, valuesId, name, lib) { Duplicates.plan(lib, g, keep, values, name) }
                             GroupCard(
-                                g, lib, keepId, valuesId,
+                                g, keepId, valuesId, name, plan,
                                 onKeep = { keepChoice[g.key] = it },
                                 onValues = { valuesChoice[g.key] = it },
+                                onName = { nameChoice[g.key] = it },
                                 onMerge = {
-                                    val keep = g.members.first { it.food.id == keepId }.food
-                                    val values = g.members.first { it.food.id == valuesId }.food
                                     scope.launch {
-                                        app.repository.mergeFoods(Duplicates.plan(lib, g, keep, values))
+                                        app.repository.mergeFoods(plan)
                                         merged++
                                     }
                                 },
@@ -132,11 +135,13 @@ fun DuplicatesSheet(onDismiss: () -> Unit) {
 @Composable
 private fun GroupCard(
     g: Duplicates.Group,
-    lib: Library,
     keepId: String,
     valuesId: String,
+    name: String,
+    plan: Duplicates.Merge,
     onKeep: (String) -> Unit,
     onValues: (String) -> Unit,
+    onName: (String) -> Unit,
     onMerge: () -> Unit,
     onIgnore: () -> Unit,
 ) {
@@ -177,6 +182,40 @@ private fun GroupCard(
                     }
                 }
             }
+        }
+        val names = (listOf(name) + g.names).distinctBy { it.lowercase() }
+        if (names.size > 1) {
+            Text("Name", style = MaterialTheme.typography.labelMedium, color = ShokuColors.Muted)
+            @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                names.forEach { n ->
+                    Column(Modifier.clip(androidx.compose.foundation.shape.CircleShape).clickable { onName(n) }) {
+                        StatusChip(n, if (n == name) ChipStyle.Filled else ChipStyle.Tinted)
+                    }
+                }
+            }
+        }
+        // Exactly what the one food will be.
+        val f = plan.food
+        Column(Modifier.fillMaxWidth().clip(ShokuShapes.Button).background(ShokuColors.Tint).padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text("Result", style = MaterialTheme.typography.labelMedium, color = ShokuColors.Muted)
+            Text(f.name + (f.brand?.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""), style = MaterialTheme.typography.bodyLarge)
+            Text(
+                listOfNotNull(
+                    per(f),
+                    f.protein?.let { "${formatQty(Math.round(it * 10) / 10.0)} g protein" },
+                    f.carbs?.let { "${formatQty(Math.round(it * 10) / 10.0)} g carbs" },
+                    f.fat?.let { "${formatQty(Math.round(it * 10) / 10.0)} g fat" },
+                    f.fibre?.let { "${formatQty(Math.round(it * 10) / 10.0)} g fibre" },
+                ).joinToString(" · "),
+                style = MaterialTheme.typography.bodySmall, color = ShokuColors.Ink,
+            )
+            val extra = listOfNotNull(
+                plan.portions.takeIf { it.isNotEmpty() }?.joinToString(", ") { "1 ${it.label} = ${formatQty(it.qty)} ${f.unit}" },
+                if (!f.barcode.isNullOrBlank()) "barcode kept" else null,
+                "${g.members.sumOf { it.logs }} past entries keep their numbers",
+            )
+            Text(extra.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = ShokuColors.Muted)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             SecondaryButton("Not the same", onClick = onIgnore, modifier = Modifier.weight(1f))

@@ -19,6 +19,10 @@ object Duplicates {
 
     /** One product found more than once, with the suggested one to keep and the one whose values to use. */
     data class Group(val members: List<Member>, val keep: Member, val valuesFrom: Member) {
+        /** The cleanest name among the copies (see [bestName]). */
+        val name: String get() = bestName(members.map { it.food }, keep.food, valuesFrom.food)
+        /** The distinct names to choose from, the suggested one first. */
+        val names: List<String> get() = (listOf(name) + members.map { it.food.name.trim() }).distinctBy { it.lowercase() }
         val key get() = members.map { it.food.id }.sorted().joinToString("|")
         /** Why [keep] is suggested, in plain words. */
         val keepReason: String get() = reasons(keep, members)
@@ -29,6 +33,8 @@ object Duplicates {
     private val STOP = setOf("with", "and", "the", "of", "in", "a", "ready", "to", "eat", "pack", "small", "large", "big", "mini", "ohne", "mit", "und")
     /** Words that don't make a different product ("High-protein wrap" = "Protein Wraps"); flavours and ingredients do. */
     private val FILLER = setOf("high", "original", "classic", "plain", "fresh", "premium", "bio", "organic", "family", "value", "new", "ultra", "pure", "extra", "style", "type")
+    /** Shops whose name often sits in a product name ("Aldi Goldähren Protein Wraps"). */
+    private val SHOPS = setOf("aldi", "lidl", "rewe", "edeka", "kaufland", "penny", "netto", "dm", "rossmann", "norma", "globus", "real", "spar", "tesco", "bigbasket", "dmart")
     private val BRAND_STOP = setOf("pvt", "ltd", "limited", "snacks", "foods", "food", "gmbh", "co", "inc", "company")
 
     private fun stem(w: String) = if (w.length > 3 && w.endsWith("s") && !w.endsWith("ss")) w.dropLast(1) else w
@@ -62,7 +68,9 @@ object Duplicates {
         if (!a.barcode.isNullOrBlank() && a.barcode == b.barcode) return true
         if (!a.barcode.isNullOrBlank() && !b.barcode.isNullOrBlank()) return false // two different barcodes: two products
         val ba = ka.brand; val bb = kb.brand
-        val wa = ka.words; val wb = kb.words
+        // Brand and shop words in a name don't make it another product.
+        val brandWords = (ba.split(" ") + bb.split(" ")).filter { it.isNotEmpty() }.toSet() + SHOPS
+        val wa = (ka.words - brandWords).ifEmpty { ka.words }; val wb = (kb.words - brandWords).ifEmpty { kb.words }
         if (wa.isEmpty() || wb.isEmpty()) return false
         if (!similarNutrition(a, b)) return false
         // A generic and a product of the same name are a family, not a duplicate.
@@ -127,8 +135,33 @@ object Duplicates {
     /** Library foods that [draft] probably is (for "Already in your library?"), best first. */
     fun matches(library: Library, draft: Food, logs: List<LogEntry> = emptyList()): List<Food> {
         val used = logs.filter { !it.deleted && it.refType == RefType.FOOD }.groupingBy { it.refId }.eachCount()
-        return library.foods.values.filter { !it.deleted && same(draft, it) }
+        // Not the hidden size rows of a family ("Tomato (m)"): the family itself is the match.
+        return library.foods.values.filter { !it.deleted && !(it.archived && it.parentId != null) && FoodFamilies.sizeLabel(it.name) == null && same(draft, it) }
             .sortedWith(compareByDescending<Food> { !draft.barcode.isNullOrBlank() && it.barcode == draft.barcode }.thenByDescending { used[it.id] ?: 0 })
+    }
+
+    /**
+     * The name to keep: proper capitals, without the brand (that's its own field), short and plain; the
+     * one you log most and the one with the label values break ties.
+     * "Roasted Vermicelli" over "roasted vermicelli" and "Bambino Roasted Vermicelli".
+     */
+    fun bestName(foods: List<Food>, keep: Food, valuesFrom: Food): String {
+        val brands = foods.flatMap { brandKey(it.brand).split(" ") }.filter { it.length > 2 }.toSet()
+        fun score(f: Food): Double {
+            val n = f.name.trim()
+            val words = searchKey(n).split(Regex("[^a-z0-9]+")).filter { it.isNotEmpty() }.map(::stem)
+            var sc = 0.0
+            if (n.isNotEmpty() && n == n.lowercase()) sc -= 3 // "roasted vermicelli"
+            if (n.length > 4 && n == n.uppercase()) sc -= 2 // "PROTEIN WRAPS"
+            if (words.any { it in brands }) sc -= 2 // the brand belongs in the brand field
+            if (Regex("[\\[\\]{}|]|cut off|\\?").containsMatchIn(n)) sc -= 3
+            if (n.length > 40) sc -= 2
+            sc -= n.length / 40.0
+            if (f.id == keep.id) sc += 1.5
+            if (f.id == valuesFrom.id) sc += 1.0
+            return sc
+        }
+        return foods.maxBy(::score).name.trim()
     }
 
     /**
@@ -149,15 +182,27 @@ object Duplicates {
      */
     data class Merge(val food: Food, val portions: List<FoodPortion>, val gone: List<Food>, val factors: Map<String, Double?>)
 
-    fun plan(library: Library, group: Group, keep: Food = group.keep.food, valuesFrom: Food = group.valuesFrom.food, now: Long = System.currentTimeMillis()): Merge {
+    fun plan(
+        library: Library, group: Group, keep: Food = group.keep.food, valuesFrom: Food = group.valuesFrom.food,
+        name: String = bestName(group.members.map { it.food }, keep, valuesFrom), now: Long = System.currentTimeMillis(),
+    ): Merge {
         val all = group.members.map { it.food }
         val others = all.filter { it.id != keep.id }
-        val aliases = (keep.aliases.split(",") + others.map { it.name } + others.flatMap { it.aliases.split(",") })
-            .map { it.trim() }.filter { it.isNotEmpty() && !it.equals(keep.name, ignoreCase = true) }.distinctBy { it.lowercase() }
+        val finalName = name.trim().ifEmpty { keep.name }
+        val aliases = (all.map { it.name } + all.flatMap { it.aliases.split(",") })
+            .map { it.trim() }.filter { it.isNotEmpty() && !it.equals(finalName, ignoreCase = true) }.distinctBy { it.lowercase() }
+        // A value the chosen copy lacks comes from another copy, converted to the chosen copy's basis.
+        fun fill(pick: (Food) -> Double?): Double? = pick(valuesFrom) ?: all.filter { it.id != valuesFrom.id }.firstNotNullOfOrNull { f ->
+            val v = pick(f) ?: return@firstNotNullOfOrNull null
+            val k = factor(f, valuesFrom)?.takeIf { it > 0 } ?: return@firstNotNullOfOrNull null
+            if (f.baseQty <= 0) null else v / f.baseQty / k * valuesFrom.baseQty
+        }
         val food = keep.copy(
+            name = finalName,
             unit = valuesFrom.unit, baseQty = valuesFrom.baseQty,
-            kcal = valuesFrom.kcal, protein = valuesFrom.protein, fibre = valuesFrom.fibre ?: all.firstNotNullOfOrNull { f -> f.fibre?.takeIf { f.unit == valuesFrom.unit } },
-            carbs = valuesFrom.carbs, fat = valuesFrom.fat,
+            kcal = fill { it.kcal }, protein = fill { it.protein }, fibre = fill { it.fibre },
+            carbs = fill { it.carbs }, fat = fill { it.fat },
+            parentId = keep.parentId ?: all.firstNotNullOfOrNull { it.parentId }?.takeIf { it !in all.map { f -> f.id } },
             brand = valuesFrom.brand?.takeIf { it.isNotBlank() } ?: all.firstNotNullOfOrNull { it.brand?.takeIf { b -> b.isNotBlank() } },
             barcode = valuesFrom.barcode?.takeIf { it.isNotBlank() } ?: all.firstNotNullOfOrNull { it.barcode?.takeIf { b -> b.isNotBlank() } },
             source = valuesFrom.source, kind = if (all.any { it.kind == FoodKind.PRODUCT }) FoodKind.PRODUCT else keep.kind,

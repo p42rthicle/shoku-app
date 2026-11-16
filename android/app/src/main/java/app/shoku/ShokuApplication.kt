@@ -46,6 +46,13 @@ open class ShokuApplication : Application() {
                     .onSuccess { prefs.edit().putBoolean("quickToFoods_v1", true).apply() }
                     .onFailure { android.util.Log.e("Shoku", "Linking estimates failed", it) }
             }
+            // One time: "[o] Chicken Curry (Pak Resto.)" becomes "Chicken Curry", with "Ordered online · Pak Resto."
+            // in the notes of its entries.
+            if (!prefs.getBoolean("onlineOrders_v1", false)) {
+                runCatching { repository.tidyOnlineOrders() }
+                    .onSuccess { prefs.edit().putBoolean("onlineOrders_v1", true).apply() }
+                    .onFailure { android.util.Log.e("Shoku", "Tidying online orders failed", it) }
+            }
             if (!prefs.getBoolean("foodFamilies_v1", false)) {
                 runCatching { repository.applyFoodFamilies() }
                     .onSuccess { prefs.edit().putBoolean("foodFamilies_v1", true).apply() }

@@ -1,5 +1,7 @@
 package app.shoku.ui.today
 
+import app.shoku.ui.components.cardPiece
+import app.shoku.ui.components.CardPiece
 import app.shoku.ui.dayMonth
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
@@ -269,19 +271,17 @@ fun TodayScreen(
                     }
                 }
 
+                // Each meal is a header, one item per entry and a footer, drawn as one card: a long dinner is
+                // built a row at a time while scrolling instead of all in one frame (smooth at 120 Hz).
                 state.meals.forEach { meal ->
-                    item(key = "meal-${meal.meal}") {
-                        MealCard(
-                            meal = meal,
-                            library = library,
-                            supplements = state.supplements[meal.meal].orEmpty(),
-                            onSupplement = { s, taken -> vm.toggleSupplement(s, taken) },
-                            onToggle = vm::toggle,
-                            onEdit = { editing = it },
-                            onDelete = ::deleteWithUndo,
-                            onAdd = { onAdd(state.date, meal.meal) },
-                            onRemovePlanned = { removePlanned(meal.meal) },
-                        )
+                    item(key = "meal-${meal.meal}", contentType = "meal-head") {
+                        MealHeader(meal, state.supplements[meal.meal].orEmpty(), onSupplement = { s, taken -> vm.toggleSupplement(s, taken) })
+                    }
+                    items(meal.entries, key = { "e-" + it.id }, contentType = { "entry" }) { entry ->
+                        MealEntry(entry, library, onToggle = vm::toggle, onEdit = { editing = it }, onDelete = ::deleteWithUndo)
+                    }
+                    item(key = "meal-foot-${meal.meal}", contentType = "meal-foot") {
+                        MealFooter(meal, onAdd = { onAdd(state.date, meal.meal) }, onRemovePlanned = { removePlanned(meal.meal) })
                     }
                 }
             }
@@ -553,22 +553,13 @@ private fun entryDetail(e: LogEntry): String {
 }
 
 @Composable
-private fun MealCard(
+private fun MealHeader(
     meal: MealUi,
-    library: Library?,
-    onToggle: (LogEntry) -> Unit,
-    onEdit: (LogEntry) -> Unit,
-    onDelete: (LogEntry) -> Unit,
-    onAdd: () -> Unit,
-    supplements: List<Pair<app.shoku.data.db.Supplement, Boolean>> = emptyList(),
-    onSupplement: (app.shoku.data.db.Supplement, Boolean) -> Unit = { _, _ -> },
-    onRemovePlanned: () -> Unit = {},
+    supplements: List<Pair<app.shoku.data.db.Supplement, Boolean>>,
+    onSupplement: (app.shoku.data.db.Supplement, Boolean) -> Unit,
 ) {
     val count = meal.entries.size
-    OutlinedCard(
-        Modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 16.dp, bottom = 6.dp),
-    ) {
+    Column(Modifier.fillMaxWidth().cardPiece(CardPiece.Top, ShokuSpacing.Gap).padding(start = 18.dp, end = 18.dp, top = 16.dp, bottom = 10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconTile(mealIcon(meal.meal))
             Spacer(Modifier.width(14.dp))
@@ -603,27 +594,34 @@ private fun MealCard(
                 }
             }
         }
-        Spacer(Modifier.height(10.dp))
-        meal.entries.forEach { entry ->
-            key(entry.id) {
-                Hairline()
-                SwipeToDelete(enabled = entry.status != EntryStatus.EATEN, onDelete = { onDelete(entry) }) {
-                    // Foods show their current name and brand chip; dishes, batches and quick entries keep the logged name.
-                    val food = if (entry.refType == RefType.FOOD) entry.refId?.let { library?.foods?.get(it) } else null
-                    EntryRow(
-                        name = food?.name ?: entry.name,
-                        tag = food?.brand ?: entry.variant,
-                        detail = entryDetail(entry),
-                        kcal = (entry.kcal ?: 0.0).toFloat(),
-                        proteinG = (entry.protein ?: 0.0).toFloat(),
-                        eaten = entry.status == EntryStatus.EATEN,
-                        onToggle = { onToggle(entry) },
-                        onClick = { onEdit(entry) },
-                        approx = entry.basis != Basis.EXACT,
-                    )
-                }
-            }
+    }
+}
+
+@Composable
+private fun MealEntry(entry: LogEntry, library: Library?, onToggle: (LogEntry) -> Unit, onEdit: (LogEntry) -> Unit, onDelete: (LogEntry) -> Unit) {
+    Column(Modifier.fillMaxWidth().cardPiece(CardPiece.Middle, ShokuSpacing.Gap).padding(horizontal = 18.dp)) {
+        Hairline()
+        SwipeToDelete(enabled = entry.status != EntryStatus.EATEN, onDelete = { onDelete(entry) }) {
+            // Foods show their current name and brand chip; dishes, batches and quick entries keep the logged name.
+            val food = if (entry.refType == RefType.FOOD) entry.refId?.let { library?.foods?.get(it) } else null
+            EntryRow(
+                name = food?.name ?: entry.name,
+                tag = food?.brand ?: entry.variant,
+                detail = entryDetail(entry),
+                kcal = (entry.kcal ?: 0.0).toFloat(),
+                proteinG = (entry.protein ?: 0.0).toFloat(),
+                eaten = entry.status == EntryStatus.EATEN,
+                onToggle = { onToggle(entry) },
+                onClick = { onEdit(entry) },
+                approx = entry.basis != Basis.EXACT,
+            )
         }
+    }
+}
+
+@Composable
+private fun MealFooter(meal: MealUi, onAdd: () -> Unit, onRemovePlanned: () -> Unit) {
+    Column(Modifier.fillMaxWidth().cardPiece(CardPiece.Bottom, ShokuSpacing.Gap).padding(start = 18.dp, end = 18.dp, bottom = 6.dp)) {
         Hairline()
         Row(
             Modifier

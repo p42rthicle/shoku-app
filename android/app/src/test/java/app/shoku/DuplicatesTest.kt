@@ -53,4 +53,12 @@ class DuplicatesTest {
         val scanned = Food("new", "Protein wraps", "g", 100.0, 318.0, 18.4, null, brand = "Goldähren", barcode = "4061458000000")
         assertEquals(listOf("w2", "w1"), Duplicates.matches(lib, scanned).map { it.id }.take(2).sorted().reversed())
     }
+
+    @Test
+    fun aNewTomatoIsNotOfferedTheHiddenSizeRows() {
+        val tomato = Food("t0", "Tomato", "g", 100.0, 19.0, 0.9, 1.2, kind = FoodKind.GENERIC)
+        val small = Food("t1", "Tomato (s)", "pc", 1.0, 17.0, 0.8, 1.0, archived = true, parentId = "t0")
+        val l = Library(listOf(tomato, small), emptyList(), emptyList(), emptyList(), emptyList())
+        assertEquals(listOf("t0"), Duplicates.matches(l, Food("new", "Tomato", "g", 100.0, 18.0, 0.9, 1.2, kind = FoodKind.GENERIC)).map { it.id })
+    }
 }

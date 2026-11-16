@@ -307,7 +307,11 @@ class ShokuRepository(private val db: ShokuDatabase, scope: CoroutineScope) {
                 val rowMoves = moves.filter { it.itemId == r.id }.map { it.copy(delta = it.delta * f, updatedAt = now) }
                 Triple(r.copy(foodId = keepId, name = m.food.name, unit = m.food.unit, countQty = r.countQty?.times(f), lowAt = r.lowAt?.times(f), updatedAt = now), rowMoves, f)
             }
-            val main = converted.sortedWith(compareByDescending<Triple<app.shoku.data.db.StockItem, *, *>> { it.first.countQty != null }.thenByDescending { it.first.countedAt }).firstOrNull()
+            // The row already counted in the merged unit stays (no rounding from a conversion), then the one with a count.
+            val main = converted.sortedWith(
+                compareByDescending<Triple<app.shoku.data.db.StockItem, List<app.shoku.data.db.StockMove>, Double>> { it.third == 1.0 }
+                    .thenByDescending { it.first.countQty != null }.thenByDescending { it.first.countQty ?: 0.0 },
+            ).firstOrNull()
             if (main != null) {
                 home.upsertStock(listOf(main.first))
                 home.upsertMoves(main.second)
@@ -318,6 +322,27 @@ class ShokuRepository(private val db: ShokuDatabase, scope: CoroutineScope) {
                 }
             }
             moved.size
+        }
+    }
+
+    /**
+     * Names once marked "[o] Chicken Curry (Pak Resto.)" for food ordered online: the dish (or food) becomes
+     * "Chicken Curry" and its entries get the note "Ordered online · Pak Resto.". Numbers don't change.
+     */
+    suspend fun tidyOnlineOrders(): Int = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        val mark = Regex("""^\s*\[o\]\s*(.+?)\s*(?:\(([^()]+)\))?\s*$""", RegexOption.IGNORE_CASE)
+        fun split(name: String): Pair<String, String>? = mark.matchEntire(name)?.let { m ->
+            m.groupValues[1].trim() to listOfNotNull("Ordered online", m.groupValues[2].trim().ifEmpty { null }).joinToString(" · ")
+        }
+        db.withTransaction {
+            val dishes = lib.allDishes().filter { !it.deleted }.mapNotNull { d -> split(d.name)?.let { d to it } }
+            lib.upsertDishes(dishes.map { (d, s) -> d.copy(name = s.first, updatedAt = now) })
+            val foods = lib.allFoods().filter { !it.deleted }.mapNotNull { f -> split(f.name)?.let { f to it } }
+            lib.upsertFoods(foods.map { (f, s) -> f.copy(name = s.first, updatedAt = now) })
+            val entries = logs.allIncludingDeleted().filter { !it.deleted }.mapNotNull { e -> split(e.name)?.let { e to it } }
+            logs.upsertAll(entries.map { (e, s) -> e.copy(name = s.first, note = e.note?.takeIf { it.isNotBlank() } ?: s.second, updatedAt = now) })
+            dishes.size + foods.size + entries.size
         }
     }
 

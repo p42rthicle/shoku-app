@@ -36,7 +36,8 @@ android {
     buildTypes {
         release {
             // Shrunk for sharing: the Anthropic SDK alone is ~15 MB unshrunk. Signed with the debug key so
-            // anyone can build and install it; a personal phone can keep the debug build (adb run-as for database backups).
+            // anyone can build and install it. The phone runs this build (debug builds stutter at 120 Hz); backups go
+            // through BackupReceiver instead of adb run-as.
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")

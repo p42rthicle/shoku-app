@@ -100,6 +100,15 @@
         <receiver
             android:name=".data.notify.ReminderActionReceiver"
             android:exported="false" />
+        <!-- Database copy for backups from a computer (adb only: the shell holds DUMP, apps can't). -->
+        <receiver
+            android:name=".BackupReceiver"
+            android:exported="true"
+            android:permission="android.permission.DUMP">
+            <intent-filter>
+                <action android:name="app.shoku.BACKUP" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>

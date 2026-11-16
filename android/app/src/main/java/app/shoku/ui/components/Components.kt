@@ -1,5 +1,8 @@
 package app.shoku.ui.components
 
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.layout.layout
 import androidx.compose.runtime.getValue
 import app.shoku.ui.theme.pressScale
 import androidx.compose.animation.animateContentSize
@@ -136,6 +139,47 @@ fun OutlinedCard(
             .padding(contentPadding),
         content = content,
     )
+}
+
+/** Where a piece of a card split across list items sits: drawn so the pieces join into one card. */
+enum class CardPiece { Top, Middle, Bottom }
+
+/**
+ * One piece of an outlined card that a lazy list shows as several items (a meal and each of its entries),
+ * so a long card is built a row at a time instead of in one frame. Middle and bottom pieces are pulled up
+ * by the list's [gap] so the pieces touch.
+ */
+fun Modifier.cardPiece(piece: CardPiece, gap: androidx.compose.ui.unit.Dp): Modifier {
+    val r = 18.dp
+    val pulled = if (piece == CardPiece.Top) this else this.layout { m, c ->
+        val p = m.measure(c)
+        val g = gap.roundToPx()
+        layout(p.width, (p.height - g).coerceAtLeast(0)) { p.place(0, -g) }
+    }
+    val shape = when (piece) {
+        CardPiece.Top -> RoundedCornerShape(topStart = r, topEnd = r)
+        CardPiece.Middle -> androidx.compose.ui.graphics.RectangleShape
+        CardPiece.Bottom -> RoundedCornerShape(bottomStart = r, bottomEnd = r)
+    }
+    return pulled
+        .background(ShokuColors.Paper, shape)
+        .drawWithContent {
+            drawContent()
+            val stroke = 1.dp.toPx()
+            val half = stroke / 2
+            val rr = r.toPx()
+            // The whole card's outline, extended past this piece and clipped to it.
+            val top = if (piece == CardPiece.Top) half else -rr * 2
+            val bottom = if (piece == CardPiece.Bottom) size.height - half else size.height + rr * 2
+            clipRect {
+                drawRoundRect(
+                    ShokuColors.Line, topLeft = androidx.compose.ui.geometry.Offset(half, top),
+                    size = androidx.compose.ui.geometry.Size(size.width - stroke, bottom - top),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(rr - half),
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(stroke),
+                )
+            }
+        }
 }
 
 @Composable
