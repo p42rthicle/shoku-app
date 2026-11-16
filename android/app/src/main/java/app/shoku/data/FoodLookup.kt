@@ -19,6 +19,8 @@ data class FoodDraft(
     /** From a photo of the pack (no barcode match, maybe no label): typical values when [fromLabel] is false. */
     val fromPack: Boolean = false,
     val note: String? = null,
+    /** The whole pack (1000 g of rice), when the barcode database knows it: where "add to stock" starts. */
+    val packQty: Double? = null,
     /** Household units to start with, e.g. "slice" = the pack's serving size. */
     val portions: List<FoodPortion> = emptyList(),
 )
@@ -55,6 +57,7 @@ object FoodLookup {
         // Open Food Facts sometimes knows the pack but not its nutrition (Maggi India, some Haldiram's):
         // that counts as not found, so the label photo comes next instead of a food with empty values.
         val hasNutrition = product?.kcal != null
+        product?.packQty?.takeIf { it > 0 }?.let { PackSizes.remember(prefill.id, it) }
         val pack = product?.packQty?.takeIf { it <= 400 && it != product.servingQty }
             ?.let { listOf(FoodPortion(java.util.UUID.nameUUIDFromBytes("portion|${prefill.id}|pack".toByteArray()).toString(), prefill.id, "pack", it)) }.orEmpty()
         return BarcodeResult.New(
@@ -62,6 +65,7 @@ object FoodLookup {
                 prefill, families, found = hasNutrition,
                 note = if (product != null && !hasNutrition) "Open Food Facts knows this pack (${listOfNotNull(product.brand, product.cleanName().ifBlank { null }).joinToString(" ")}) but has no nutrition values. Read the label with a photo, or type them." else null,
                 portions = servingPortion(prefill, product?.servingQty) + pack,
+                packQty = product?.packQty?.takeIf { it > 0 },
             ),
         )
     }
@@ -126,6 +130,7 @@ object FoodLookup {
             archived = false,
         )
         if (updated != existing) repo.saveFood(updated, updatePast = false)
+        draft.packQty?.let { PackSizes.remember(updated.id, it) }
         return updated
     }
 
@@ -152,4 +157,14 @@ object FoodLookup {
         }
         return listOf(FoodPortion(java.util.UUID.randomUUID().toString(), food.id, label, qty))
     }
+}
+
+/**
+ * Pack sizes seen while scanning (a 1000 g bag of rice), by food id, so "add to stock" starts at the whole
+ * pack. Kept while the app runs; a food bought before starts at the amount added last time instead.
+ */
+object PackSizes {
+    private val sizes = java.util.concurrent.ConcurrentHashMap<String, Double>()
+    fun remember(foodId: String, qty: Double) { sizes[foodId] = qty }
+    fun of(foodId: String): Double? = sizes[foodId]
 }

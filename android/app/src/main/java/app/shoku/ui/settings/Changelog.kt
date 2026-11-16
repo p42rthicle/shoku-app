@@ -25,6 +25,15 @@ data class Release(val version: String, val date: String, val changes: List<Stri
  */
 val CHANGELOG = listOf(
     Release(
+        "0.9.33", "16 Nov 2026",
+        listOf(
+            "Scanning a pack to log it offers \"Bought it? Add to stock instead\"",
+            "Fixed: Scan crashed (every scan button) since the faster build; checked every screen for crashes",
+            "Deleting an entry leaves Undo up longer; eaten entries are deleted from their sheet, so a sideways swipe over them changes the day again",
+            "Adding a scanned pack to stock starts at the whole pack (a 1 kg bag of rice: 1000 g), or at what you added last time, and adds to the stock you already have",
+        ),
+    ),
+    Release(
         "0.9.32", "16 Nov 2026",
         listOf(
             "Today's + button can add to stock too: \"+ Add to stock instead\" at the top of Add opens the stock sheet (search, scan, label, pack) right there",

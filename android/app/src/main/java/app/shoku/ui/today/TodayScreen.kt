@@ -129,7 +129,8 @@ fun TodayScreen(
         vm.delete(entry)
         scope.launch {
             snackbar.currentSnackbarData?.dismiss()
-            if (snackbar.showSnackbar("Deleted ${entry.name}", "Undo", duration = SnackbarDuration.Short) == SnackbarResult.ActionPerformed) {
+            // Long: enough time to reach Undo (a short one was gone in ~4 s).
+            if (snackbar.showSnackbar("Deleted ${entry.name}", "Undo", duration = SnackbarDuration.Long) == SnackbarResult.ActionPerformed) {
                 vm.restore(entry)
             }
         }
@@ -601,7 +602,8 @@ private fun MealHeader(
 private fun MealEntry(entry: LogEntry, library: Library?, onToggle: (LogEntry) -> Unit, onEdit: (LogEntry) -> Unit, onDelete: (LogEntry) -> Unit) {
     Column(Modifier.fillMaxWidth().cardPiece(CardPiece.Middle, ShokuSpacing.Gap).padding(horizontal = 18.dp)) {
         Hairline()
-        SwipeToDelete(enabled = true, onDelete = { onDelete(entry) }) {
+        // Planned entries swipe away; over an eaten one a sideways swipe changes the day (delete it from its sheet).
+        SwipeToDelete(enabled = entry.status != EntryStatus.EATEN, onDelete = { onDelete(entry) }) {
             // Foods show their current name and brand chip; dishes, batches and quick entries keep the logged name.
             val food = if (entry.refType == RefType.FOOD) entry.refId?.let { library?.foods?.get(it) } else null
             EntryRow(
@@ -644,7 +646,7 @@ private fun MealFooter(meal: MealUi, onAdd: () -> Unit, onRemovePlanned: () -> U
     }
 }
 
-/** Swipe left or right to delete (an Undo snackbar follows). */
+/** Swipe left or right to delete (an Undo snackbar follows). Only planned entries: elsewhere a swipe changes the day. */
 @Composable
 internal fun SwipeToDelete(enabled: Boolean, onDelete: () -> Unit, content: @Composable () -> Unit) {
     if (!enabled) {

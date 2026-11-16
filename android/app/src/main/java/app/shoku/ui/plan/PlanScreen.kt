@@ -191,10 +191,20 @@ class PlanViewModel(
         amountFor.value = food to (pack ?: if (food.unit == "pc") 1.0 else food.baseQty)
     }
 
-    /** A food just scanned or picked for stock: ask how much, starting at its pack size if known. */
+    /**
+     * A food just scanned or picked for stock: ask how much, starting at the whole pack (1000 g of rice) when
+     * the scan knew it, else its "pack" unit, else what was added last time.
+     */
     fun startAmount(food: app.shoku.data.db.Food) = viewModelScope.launch {
-        val pack = libraryWith(food.id).portionsOf(food).firstOrNull { it.label == "pack" }?.qty
+        val pack = app.shoku.data.PackSizes.of(food.id)
+            ?: libraryWith(food.id).portionsOf(food).firstOrNull { it.label == "pack" }?.qty
+            ?: home.lastBought(food.id)
         amountFor.value = food to (pack ?: if (food.unit == "pc") 1.0 else food.baseQty)
+    }
+
+    /** "Bought it? Add to stock instead" from Add after a scan. */
+    fun startAmountFor(foodId: String) = viewModelScope.launch {
+        repo.library.first().foods[foodId]?.let { startAmount(it) }
     }
 
     /** "2 kg chana dal, 30 eggs, 1 l milk" -> stock, through the AI (one request, about a cent). */

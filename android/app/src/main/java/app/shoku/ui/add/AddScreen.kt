@@ -97,6 +97,8 @@ fun AddScreen(
     startQuery: String? = null,
     /** "Add to stock instead": bought something rather than ate it. */
     onAddToStock: (() -> Unit)? = null,
+    /** After a scan: put this food in stock instead of logging it. */
+    onStockFood: ((String) -> Unit)? = null,
 ) {
     LaunchedEffect(Unit) { startQuery?.takeIf { it.isNotBlank() }?.let { vm.query.value = it } }
     LaunchedEffect(Unit) { startBarcode?.let { vm.onBarcode(it) } }
@@ -115,6 +117,7 @@ fun AddScreen(
     val context = LocalContext.current
     val addedCount = added.sumOf { it.size }
     var sheetFor by remember { mutableStateOf<Suggestion?>(null) }
+    var scanned by remember { mutableStateOf(false) } // the open amount sheet came from a barcode scan
     val scope = rememberCoroutineScope()
     val focus = LocalFocusManager.current
     val defaultStatus = ShokuRepository.defaultStatusFor(vm.date)
@@ -136,7 +139,7 @@ fun AddScreen(
     // A scanned food that is ready opens the amount sheet straight away.
     LaunchedEffect(scan) {
         when (val st = scan) {
-            is ScanState.Ready -> { sheetFor = st.suggestion; vm.clearScan() }
+            is ScanState.Ready -> { sheetFor = st.suggestion; scanned = true; vm.clearScan() }
             is ScanState.Failed -> { snackbar.showSnackbar(st.message); vm.clearScan() }
             else -> {}
         }
@@ -408,7 +411,13 @@ fun AddScreen(
                 sheetFor = null
                 announce("Added ${s.name}")
             },
-            onDismiss = { sheetFor = null },
+            onDismiss = { sheetFor = null; scanned = false },
+            // A scanned pack is often one you just bought: offer stock instead of logging it.
+            header = if (!scanned || onStockFood == null || s.refType != app.shoku.data.db.RefType.FOOD || s.refId == null) null else { {
+                Box(Modifier.clip(androidx.compose.foundation.shape.CircleShape).clickable { val id = s.refId; sheetFor = null; scanned = false; onStockFood(id) }) {
+                    app.shoku.ui.components.StatusChip("Bought it? Add to stock instead", app.shoku.ui.components.ChipStyle.Tinted)
+                }
+            } },
         )
     }
 }

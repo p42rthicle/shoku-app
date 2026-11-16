@@ -147,6 +147,14 @@ class HomeRepository(private val db: ShokuDatabase, scope: CoroutineScope) {
 
     suspend fun deleteStockItem(item: StockItem) = home.upsertStock(listOf(item.copy(deleted = true, updatedAt = System.currentTimeMillis())))
 
+    /** How much of this food was added to stock last time (a bought pack, else the first count), or null. */
+    suspend fun lastBought(foodId: String): Double? = withContext(Dispatchers.IO) {
+        val rows = home.allStock().filter { it.foodId == foodId }
+        val ids = rows.map { it.id }.toSet()
+        home.allMoves().filter { it.itemId in ids && !it.deleted && it.delta > 0 }.maxByOrNull { it.at }?.delta
+            ?: rows.filter { (it.countQty ?: 0.0) > 0 }.maxByOrNull { it.countedAt }?.countQty
+    }
+
     /** Removes a food's stock rows (it became a supplement). */
     suspend fun deleteFoodStock(foodId: String) = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()

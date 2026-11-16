@@ -315,6 +315,7 @@ fun ShokuApp() {
                     addVm, snackbar, onClose = { addTarget = null }, startDescribing = target.describe, startBarcode = target.barcode,
                     startPlate = target.plate, startScanner = target.scanner, startBatchId = target.batchId, startQuery = target.query,
                     onAddToStock = { addTarget = null; homeStockUi.searching = true },
+                    onStockFood = { id -> addTarget = null; planVm.startAmountFor(id) },
                     onCook = { name ->
                         // Cook in Library, then come back to this Add with the new batch ready to log.
                         val back = target.copy(describe = false, barcode = null, plate = false, scanner = false, batchId = null)
