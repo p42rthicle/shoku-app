@@ -223,5 +223,18 @@ class TodayViewModel(
     fun saveFood(food: app.shoku.data.db.Food, updatePast: Boolean, done: (Int) -> Unit) = viewModelScope.launch { done(repo.saveFood(food, updatePast)) }
     fun savePortions(rows: List<app.shoku.data.db.FoodPortion>) = viewModelScope.launch { repo.savePortions(rows) }
     fun restore(entry: LogEntry) = viewModelScope.launch { repo.restore(entry) }
-    fun save(entry: LogEntry) = viewModelScope.launch { repo.update(entry) }
+    /** A photo of a meal without an estimate: saved with each of the meal's entries on the day shown. */
+    fun attachPhotos(meal: String, base64s: List<String>) = viewModelScope.launch {
+        val names = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { base64s.map { app.shoku.data.PhotoStore.save(it) } }
+        state.value.meals.firstOrNull { it.meal == meal }?.entries.orEmpty().forEach { e ->
+            val all = (e.photos.orEmpty().split(',').filter { it.isNotBlank() } + names).distinct().joinToString(",")
+            repo.update(e.copy(photos = all))
+        }
+    }
+
+    fun save(entry: LogEntry) = viewModelScope.launch {
+        // An AI entry corrected here teaches the next estimate (AiMemory).
+        state.value.meals.flatMap { it.entries }.firstOrNull { it.id == entry.id }?.let { app.shoku.data.ai.AiMemory.learnFromEdit(it, entry) }
+        repo.update(entry)
+    }
 }

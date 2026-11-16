@@ -80,9 +80,9 @@ data class AiLabelResult(
 @Serializable private data class Envelope<T>(val data: T)
 @Serializable data class AiUsage(val month: String, val usd: Double, val calls: Int, val capUsd: Double)
 @Serializable private data class CapBody(val usd: Double)
-@Serializable private data class TextBody(val text: String, val library: List<LibItem>? = null)
+@Serializable private data class TextBody(val text: String, val library: List<LibItem>? = null, val hints: List<String>? = null)
 @Serializable private data class ImageBody(val image: String, val mediaType: String = "image/jpeg", val text: String? = null, val library: List<LibItem>? = null)
-@Serializable private data class ImagesBody(val images: List<String>, val mediaType: String = "image/jpeg", val text: String? = null, val library: List<LibItem>? = null)
+@Serializable private data class ImagesBody(val images: List<String>, val mediaType: String = "image/jpeg", val text: String? = null, val library: List<LibItem>? = null, val hints: List<String>? = null)
 
 /** What an AI item resolves to in this app. */
 data class ResolvedItem(
@@ -165,12 +165,13 @@ class AiClient {
         return LibraryKeys(items, refs, references)
     }
 
-    suspend fun meal(text: String, keys: LibraryKeys): AiMealResult =
-        call("/ai/meal", json.encodeToString(TextBody.serializer(), TextBody(text, keys.items)), AiMealResult.serializer())
+    /** [hints]: their past corrections and usual portions (AiMemory), so estimates follow how they eat. */
+    suspend fun meal(text: String, keys: LibraryKeys, hints: List<String> = emptyList()): AiMealResult =
+        call("/ai/meal", json.encodeToString(TextBody.serializer(), TextBody(text, keys.items, hints.ifEmpty { null })), AiMealResult.serializer())
 
     /** One to four photos of the same meal; several angles help the portion estimate. */
-    suspend fun plate(jpegsBase64: List<String>, note: String?, keys: LibraryKeys): AiMealResult =
-        call("/ai/plate", json.encodeToString(ImagesBody.serializer(), ImagesBody(jpegsBase64.take(4), text = note, library = keys.items)), AiMealResult.serializer())
+    suspend fun plate(jpegsBase64: List<String>, note: String?, keys: LibraryKeys, hints: List<String> = emptyList()): AiMealResult =
+        call("/ai/plate", json.encodeToString(ImagesBody.serializer(), ImagesBody(jpegsBase64.take(4), text = note, library = keys.items, hints = hints.ifEmpty { null })), AiMealResult.serializer())
 
     /** One to four photos of the same pack (front for the name, back for the nutrition table). */
     suspend fun product(jpegsBase64: List<String>): AiProductResult =

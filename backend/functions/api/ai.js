@@ -209,12 +209,18 @@ function images(body) {
 
 // ---------- Routes ----------
 
+/** Their past corrections and usual portions (from the app), as one text block; [] when none. */
+function hintsBlock(body) {
+	const lines = Array.isArray(body.hints) ? body.hints.filter((h) => typeof h === 'string' && h.trim()).slice(0, 60).map((h) => '- ' + h.slice(0, 200)) : [];
+	return lines.length ? [{ type: 'text', text: "This person's past corrections and usual portions. When the food or photo matches, follow them over your own guess:\n" + lines.join('\n') }] : [];
+}
+
 async function parseMeal(apiKey, body) {
 	if (!body.text || typeof body.text !== 'string') throw new HttpError(400, 'text is required');
 	return ask(apiKey, {
 		task: 'Task: turn their description of what they ate into items. If the description says which meal it was, set meal; otherwise null.',
 		library: body.library,
-		content: [{ type: 'text', text: body.text.slice(0, 2000) }],
+		content: [...hintsBlock(body), { type: 'text', text: body.text.slice(0, 2000) }],
 		schema: MEAL_RESULT,
 	});
 }
@@ -246,7 +252,7 @@ async function plate(apiKey, body) {
 	return ask(apiKey, {
 		task: 'Task: estimate what is on this plate or in this bowl. List each visible food with a realistic amount; use the plate, cutlery, glasses and bowls for scale. Match to their library when it is clearly the same dish (e.g. their own dal or rice batch). Confidence is at most medium for anything judged by eye.' + angles + extra,
 		library: body.library,
-		content: [...photos, { type: 'text', text: 'What is here and how much?' }],
+		content: [...photos, ...hintsBlock(body), { type: 'text', text: 'What is here and how much?' }],
 		schema: MEAL_RESULT,
 		model: MODEL,
 	});

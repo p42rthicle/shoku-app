@@ -158,6 +158,7 @@ const val MEAL_TASK_TEXT = "Task: turn their description of what they ate into i
 const val LABEL_TASK = "Task: read the nutrition table on this food package. Use the per 100 g / 100 ml column (not per serving). Energy in kcal (convert from kJ only if kcal is missing). Name and brand from the package if visible. German labels: Brennwert = energy, Eiweiß = protein, Ballaststoffe = fibre, Kohlenhydrate = carbs, Fett = fat. If the table is not readable, set readable false."
 const val PRODUCT_TASK = "Task: identify the packaged product in the photos (one to four photos of the same pack). They may show the front, back or side of the pack, often with no nutrition table (a supplement tub, a spice packet). Take the name and brand from the front of the pack when a photo shows it, and the values from the nutrition table when one shows. Name: the product as sold, short, without the brand (e.g. Creatine monohydrate). Brand: as printed on the pack. If a nutrition table is visible in any photo, read the per 100 g / 100 ml column and set from_label true. Otherwise give typical per-100 values for this kind of product from what you know and set from_label false (pure creatine, caffeine or electrolyte powders are about 0 kcal). serving_size: grams or ml in one serving or scoop if the pack says, else null. note: one short line saying what you read from the pack and what is typical. If you cannot tell what the product is, set identified false."
 
+const val HINTS_INTRO = "This person's past corrections and usual portions. When the food or photo matches, follow them over your own guess:"
 const val PLATE_TASK = "Task: estimate what is on this plate or in this bowl. List each visible food with a realistic amount; use the plate, cutlery, glasses and bowls for scale. Match to their library when it is clearly the same dish (e.g. their own dal or rice batch). Confidence is at most medium for anything judged by eye."
 
 const val RECIPE_TASK = "Task: they describe what went into a pot for one cook (a batch). Return every ingredient with its amount for the whole pot, matched to their library where possible. Spices under 5 g can be skipped unless named with an amount. If they say how many servings or the dish name, fill those."
@@ -227,8 +228,15 @@ object DirectRoutes {
 
     private fun requiredText(body: JsonObject): String = body.str("text")?.takeIf { it.isNotEmpty() } ?: throw BackendException(400, "text is required")
 
+    /** Their past corrections and usual portions, as one text block (as ai.js's hintsBlock). */
+    private fun hints(body: JsonObject): List<UserBlock> {
+        val lines = (body["hints"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content?.trim()?.takeIf { t -> t.isNotEmpty() } }
+            .take(60).map { "- " + it.take(200) }
+        return if (lines.isEmpty()) emptyList() else listOf(UserBlock.Text(HINTS_INTRO + "\n" + lines.joinToString("\n")))
+    }
+
     private fun parseMeal(body: JsonObject) = ask(
-        MEAL_TASK_TEXT, body["library"], listOf(UserBlock.Text(requiredText(body).take(2000))), MEAL_RESULT,
+        MEAL_TASK_TEXT, body["library"], hints(body) + UserBlock.Text(requiredText(body).take(2000)), MEAL_RESULT,
     )
 
     private fun readLabel(body: JsonObject) = ask(
@@ -246,7 +254,7 @@ object DirectRoutes {
         val angles = if (photos.size > 1) {
             " There are ${photos.size} photos of the same meal from different angles: use them together to judge depth and portion size, and count each food once."
         } else ""
-        return ask(PLATE_TASK + angles + extra, body["library"], photos + UserBlock.Text("What is here and how much?"), MEAL_RESULT, model = PHOTO_MODEL)
+        return ask(PLATE_TASK + angles + extra, body["library"], photos + hints(body) + UserBlock.Text("What is here and how much?"), MEAL_RESULT, model = PHOTO_MODEL)
     }
 
     private fun recipe(body: JsonObject) = ask(

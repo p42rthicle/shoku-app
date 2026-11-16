@@ -1,5 +1,6 @@
 package app.shoku.ui.today
 
+import androidx.compose.material.icons.outlined.PhotoCamera
 import app.shoku.ui.components.cardPiece
 import app.shoku.ui.components.CardPiece
 import app.shoku.ui.dayMonth
@@ -124,6 +125,26 @@ fun TodayScreen(
     var replaceWith by remember { mutableStateOf<Pair<LogEntry, Pair<String, String>>?>(null) }
     var picking by remember { mutableStateOf(false) }
     val today = LocalDate.now()
+
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var photoAt by remember { mutableStateOf<String?>(null) }
+    // "Add a photo of this meal" (no estimate): the photo sheet, then saved with the meal's entries.
+    var photoFor by remember { mutableStateOf<String?>(null) }
+    photoFor?.let { mealName ->
+        app.shoku.ui.add.PlateSheet(
+            onEstimate = { photos, _ ->
+                photoFor = null
+                vm.attachPhotos(mealName, photos)
+                android.widget.Toast.makeText(context, "Photo saved with ${mealName.lowercase()}", android.widget.Toast.LENGTH_SHORT).show()
+            },
+            onDismiss = { photoFor = null },
+            title = "Photo of your ${mealName.lowercase()}",
+            hint = "Saved with this meal's entries and in your meal photos. Nothing is estimated (no AI).",
+            showNote = false,
+            action = { n -> "Save ${if (n == 1) "photo" else "$n photos"}" },
+        )
+    }
+    photoAt?.let { f -> app.shoku.ui.components.MealPhotoViewer(f, onDismiss = { photoAt = null }) }
 
     fun deleteWithUndo(entry: LogEntry) {
         vm.delete(entry)
@@ -279,10 +300,10 @@ fun TodayScreen(
                         MealHeader(meal, state.supplements[meal.meal].orEmpty(), onSupplement = { s, taken -> vm.toggleSupplement(s, taken) })
                     }
                     items(meal.entries, key = { "e-" + it.id }, contentType = { "entry" }) { entry ->
-                        MealEntry(entry, library, onToggle = vm::toggle, onEdit = { editing = it }, onDelete = ::deleteWithUndo)
+                        MealEntry(entry, library, onToggle = vm::toggle, onEdit = { editing = it }, onDelete = ::deleteWithUndo, onPhoto = { photoAt = it })
                     }
                     item(key = "meal-foot-${meal.meal}", contentType = "meal-foot") {
-                        MealFooter(meal, onAdd = { onAdd(state.date, meal.meal) }, onRemovePlanned = { removePlanned(meal.meal) })
+                        MealFooter(meal, onAdd = { onAdd(state.date, meal.meal) }, onRemovePlanned = { removePlanned(meal.meal) }, onPhoto = { photoFor = meal.meal })
                     }
                 }
             }
@@ -599,7 +620,8 @@ private fun MealHeader(
 }
 
 @Composable
-private fun MealEntry(entry: LogEntry, library: Library?, onToggle: (LogEntry) -> Unit, onEdit: (LogEntry) -> Unit, onDelete: (LogEntry) -> Unit) {
+private fun MealEntry(entry: LogEntry, library: Library?, onToggle: (LogEntry) -> Unit, onEdit: (LogEntry) -> Unit, onDelete: (LogEntry) -> Unit, onPhoto: (String) -> Unit = {}) {
+    val photo = remember(entry.photos) { app.shoku.data.PhotoStore.of(entry.photos).firstOrNull() }
     Column(Modifier.fillMaxWidth().cardPiece(CardPiece.Middle, ShokuSpacing.Gap).padding(horizontal = 18.dp)) {
         Hairline()
         // Planned entries swipe away; over an eaten one a sideways swipe changes the day (delete it from its sheet).
@@ -616,13 +638,14 @@ private fun MealEntry(entry: LogEntry, library: Library?, onToggle: (LogEntry) -
                 onToggle = { onToggle(entry) },
                 onClick = { onEdit(entry) },
                 approx = entry.basis != Basis.EXACT,
+                onPhoto = photo?.let { p -> { onPhoto(p) } },
             )
         }
     }
 }
 
 @Composable
-private fun MealFooter(meal: MealUi, onAdd: () -> Unit, onRemovePlanned: () -> Unit) {
+private fun MealFooter(meal: MealUi, onAdd: () -> Unit, onRemovePlanned: () -> Unit, onPhoto: () -> Unit = {}) {
     Column(Modifier.fillMaxWidth().cardPiece(CardPiece.Bottom, ShokuSpacing.Gap).padding(start = 18.dp, end = 18.dp, bottom = 6.dp)) {
         Hairline()
         Row(
@@ -641,6 +664,13 @@ private fun MealFooter(meal: MealUi, onAdd: () -> Unit, onRemovePlanned: () -> U
             val plannedHere = meal.entries.size - meal.eatenCount
             if (plannedHere > 0) {
                 Box(Modifier.clip(CircleShape).clickable(onClick = onRemovePlanned)) { StatusChip("Remove $plannedHere planned", ChipStyle.Tinted) }
+            }
+            // A photo of this meal, no AI: saved with its entries, in the meal photos.
+            if (meal.entries.isNotEmpty()) {
+                Spacer(Modifier.width(6.dp))
+                Box(Modifier.clip(CircleShape).clickable(onClick = onPhoto).padding(8.dp)) {
+                    Icon(Icons.Outlined.PhotoCamera, "Add a photo of this meal", tint = ShokuColors.Muted, modifier = Modifier.size(20.dp))
+                }
             }
         }
     }

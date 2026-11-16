@@ -194,6 +194,8 @@ data class LogEntry(
     val variant: String? = null,
     /** The user's own note: where or how ("Bikanervala, Karol Bagh"). Version 5. */
     val note: String? = null,
+    /** Meal photo file names (PhotoStore), comma-separated, when logged from a photo. Version 6. */
+    val photos: String? = null,
 )
 
 /** Goals apply from [effectiveFrom] until the next goal row. */

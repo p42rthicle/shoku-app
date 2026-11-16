@@ -1,5 +1,6 @@
 package app.shoku.ui.components
 
+import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.layout.layout
@@ -438,6 +439,8 @@ fun EntryRow(
     onClick: () -> Unit = {},
     approx: Boolean = false,
     tag: String? = null,
+    /** Logged from a meal photo: a small camera icon that opens it. */
+    onPhoto: (() -> Unit)? = null,
 ) {
     Row(
         modifier
@@ -452,6 +455,11 @@ fun EntryRow(
         Column(Modifier.weight(1f)) {
             NameWithTag(name, tag, MaterialTheme.typography.titleMedium, if (eaten) ShokuColors.Ink else ShokuColors.Muted)
             Text(detail, style = MaterialTheme.typography.bodyMedium, color = ShokuColors.Muted, maxLines = 1)
+        }
+        if (onPhoto != null) {
+            Box(Modifier.clip(androidx.compose.foundation.shape.CircleShape).clickable(onClick = onPhoto).padding(8.dp)) {
+                Icon(androidx.compose.material.icons.Icons.Outlined.PhotoCamera, "Meal photo", tint = ShokuColors.Muted, modifier = Modifier.size(18.dp))
+            }
         }
         Spacer(Modifier.width(12.dp))
         Column(horizontalAlignment = Alignment.End) {

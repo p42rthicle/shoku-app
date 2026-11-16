@@ -25,6 +25,14 @@ data class Release(val version: String, val date: String, val changes: List<Stri
  */
 val CHANGELOG = listOf(
     Release(
+        "0.9.4", "16 Nov 2026",
+        listOf(
+            "Meal photos: a plate you log with a photo keeps a smaller copy of the photo (\"Save photo with the meal\", on by default); a camera icon on those entries opens it, and you can swipe through all your meal photos (also from Insights › Meal photos)",
+            "A camera button on each meal on Today adds a photo of it without any estimate (no AI): it's saved with the meal's entries and in your meal photos",
+            "Shoku AI learns from your corrections: change what it estimated (another food or amount, in the review or later on Today) and the next describe or photo follows it, along with your usual portions",
+        ),
+    ),
+    Release(
         "0.9.33", "16 Nov 2026",
         listOf(
             "Scanning a pack to log it offers \"Bought it? Add to stock instead\"",

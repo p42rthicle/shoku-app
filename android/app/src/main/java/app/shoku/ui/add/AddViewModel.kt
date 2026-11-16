@@ -476,7 +476,13 @@ class AddViewModel(
     fun cancelAi() {
         aiJob?.cancel()
         ai.value = AiState.Idle
+        pendingPhotos = emptyList()
     }
+
+    /** The plate photos of the review being shown, saved with the entries when they're logged. */
+    private var pendingPhotos: List<String> = emptyList()
+    /** What the AI proposed in that review, to learn from what was changed before logging. */
+    private var proposed: List<ResolvedItem> = emptyList()
 
     private fun aiFailure(e: Throwable): AiState = if (e is kotlinx.coroutines.CancellationException) AiState.Idle else AiState.Failed(
         when (e) {
@@ -493,8 +499,8 @@ class AddViewModel(
         runCatching {
             val lib = currentLibrary()
             val keys = aiClient.libraryKeys(lib, extra = aiClient.referenceCandidates(text, reference, lib))
-            val result = aiClient.meal(text, keys)
-            AiState.Review("Check before logging", aiClient.resolve(result.items, keys, lib, byEye = false))
+            val result = aiClient.meal(text, keys, app.shoku.data.ai.AiMemory.hints(latestLogs.value))
+            AiState.Review("Check before logging", aiClient.resolve(result.items, keys, lib, byEye = false).also { proposed = it; pendingPhotos = emptyList() })
         }.onSuccess { ai.value = it }.onFailure { ai.value = aiFailure(it) }
     }
 
@@ -504,8 +510,11 @@ class AddViewModel(
         runCatching {
             val lib = currentLibrary()
             val keys = aiClient.libraryKeys(lib, extra = note?.let { aiClient.referenceCandidates(it, reference, lib) }.orEmpty())
-            val result = aiClient.plate(photos, note?.takeIf { it.isNotBlank() }, keys)
-            AiState.Review("Estimated from the photo", aiClient.resolve(result.items, keys, lib, byEye = true))
+            val result = aiClient.plate(photos, note?.takeIf { it.isNotBlank() }, keys, app.shoku.data.ai.AiMemory.hints(latestLogs.value))
+            AiState.Review("Estimated from the photo", aiClient.resolve(result.items, keys, lib, byEye = true).also {
+                proposed = it
+                pendingPhotos = if (app.shoku.data.PhotoStore.saveWithMeal) photos else emptyList()
+            })
         }.onSuccess { ai.value = it }.onFailure { ai.value = aiFailure(it) }
     }
 
@@ -537,11 +546,17 @@ class AddViewModel(
             .onFailure { ai.value = aiFailure(it) }
     }
 
-    fun clearAi() { ai.value = AiState.Idle }
+    fun clearAi() { ai.value = AiState.Idle; pendingPhotos = emptyList() }
 
     /** Logs the reviewed items as one group, so a single undo removes them all. */
     fun logAi(items: List<ResolvedItem>, status: String) = viewModelScope.launch {
         val now = System.currentTimeMillis()
+        // Learn from what was changed in the review; keep the plate photos with what was logged.
+        app.shoku.data.ai.AiMemory.learnFromReview(proposed, items)
+        val photoNames = pendingPhotos.takeIf { it.isNotEmpty() }?.let { ps ->
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { ps.map { app.shoku.data.PhotoStore.save(it) } }.joinToString(",")
+        }
+        pendingPhotos = emptyList(); proposed = emptyList()
         val entries = items.mapIndexed { i, it ->
             // Reference dishes become library foods (with their serving portion) on first use; something the
             // AI only estimated becomes a library food too, so it's a normal match next time.
@@ -556,6 +571,7 @@ class AddViewModel(
                 status = status, basis = it.basis, source = "ai", createdAt = now + i, updatedAt = now + i,
                 // A brand on something matched to a generic ("Yadav" chakli) is kept as the entry's brand note.
                 variant = it.brand?.takeIf { _ -> it.refType != RefType.QUICK },
+                photos = photoNames,
             )
         }
         entries.forEach { repo.add(it) }

@@ -379,7 +379,7 @@ fun AddScreen(
         DescribeSheet(onSubmit = { text -> describing = false; vm.aiDescribe(text) }, onDismiss = { describing = false })
     }
     if (plating) {
-        PlateSheet(onEstimate = { photos, note -> plating = false; vm.aiPlate(photos, note) }, onDismiss = { plating = false })
+        PlateSheet(onEstimate = { photos, note -> plating = false; vm.aiPlate(photos, note) }, onDismiss = { plating = false }, askSave = true)
     }
     (aiState as? AiState.Review)?.let { review ->
         AiReviewSheet(

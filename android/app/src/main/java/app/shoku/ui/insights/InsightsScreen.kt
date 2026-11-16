@@ -1,5 +1,12 @@
 package app.shoku.ui.insights
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import app.shoku.ui.components.MealPhotoViewer
+import app.shoku.ui.components.mealPhotos
+import app.shoku.ShokuApplication
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -153,6 +160,20 @@ fun InsightsScreen(vm: InsightsViewModel, contentPadding: PaddingValues, onOpenD
         item {
             val supp by vm.supplements.collectAsState()
             if (supp.supplements.isNotEmpty()) SupplementCard(s.month, supp, onSelect = { vm.suppFilter.value = it }, onOpenDay = onOpenDay)
+        }
+
+        item {
+            // Meal photos saved with entries: swipe through them all.
+            val shoku = LocalContext.current.applicationContext as ShokuApplication
+            val all by shoku.repository.allEntries.collectAsState(initial = emptyList())
+            val count = remember(all) { mealPhotos(all).size }
+            var open by remember { mutableStateOf(false) }
+            if (open) MealPhotoViewer(null, onDismiss = { open = false })
+            OutlinedCard(Modifier.fillMaxWidth(), onClick = { open = true }) {
+                Text("Meal photos", style = MaterialTheme.typography.titleMedium)
+                Text(if (count == 0) "Photos of plates you log are kept here. Swipe through them." else "$count ${if (count == 1) "photo" else "photos"} · tap to swipe through them",
+                    style = MaterialTheme.typography.bodySmall, color = ShokuColors.Muted)
+            }
         }
 
         item {

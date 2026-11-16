@@ -323,6 +323,8 @@ fun PlateSheet(
     hint: String = "Add up to 4 photos of the same plate. A top view plus a side view, with a fork or glass in the frame, gives the best portion estimate.",
     showNote: Boolean = true,
     action: (Int) -> String = { n -> "Estimate from $n ${if (n == 1) "photo" else "photos"}" },
+    /** The plate: "Save photo with the meal" (on unless turned off; remembered). */
+    askSave: Boolean = false,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = androidx.compose.runtime.rememberCoroutineScope()
@@ -387,6 +389,11 @@ fun PlateSheet(
                     },
                     modifier = Modifier.weight(1f), icon = androidx.compose.material.icons.Icons.Outlined.PhotoLibrary,
                 )
+            }
+            if (askSave) {
+                var save by remember { mutableStateOf(app.shoku.data.PhotoStore.saveWithMeal) }
+                Spacer(Modifier.height(8.dp))
+                app.shoku.ui.components.SwitchRow("Save photo with the meal", "A smaller copy stays on this phone; a camera icon on the entries opens it", save, { save = it; app.shoku.data.PhotoStore.saveWithMeal = it })
             }
             if (showNote) {
                 Spacer(Modifier.height(12.dp))

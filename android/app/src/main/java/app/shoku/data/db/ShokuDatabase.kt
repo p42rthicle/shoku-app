@@ -104,7 +104,7 @@ interface MaintenanceDao {
 @Database(
     entities = [Food::class, FoodPortion::class, Dish::class, DishIngredient::class, Batch::class, BatchIngredient::class, LogEntry::class, Goal::class, WeightEntry::class,
         Supplement::class, SupplementDose::class, MealTemplate::class, TemplateItem::class, PlanSlot::class, StockItem::class, StockMove::class],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 abstract class ShokuDatabase : RoomDatabase() {
@@ -118,7 +118,7 @@ abstract class ShokuDatabase : RoomDatabase() {
     companion object {
         fun create(context: Context): ShokuDatabase =
             Room.databaseBuilder(context, ShokuDatabase::class.java, "shoku.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                 .build()
     }
 }
@@ -156,6 +156,13 @@ val MIGRATION_2_3 = object : androidx.room.migration.Migration(2, 3) {
 }
 
 /** Version 4: supplements, meal plan, home stock. Only adds tables; SQL copied from schemas/.../4.json. */
+/** Version 6: meal photos on log entries (only adds a nullable column; nothing is rewritten). */
+val MIGRATION_5_6 = object : androidx.room.migration.Migration(5, 6) {
+    override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `log_entries` ADD COLUMN `photos` TEXT")
+    }
+}
+
 /** Version 5: a note on each log entry (only adds a nullable column; nothing is rewritten). */
 val MIGRATION_4_5 = object : androidx.room.migration.Migration(4, 5) {
     override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
