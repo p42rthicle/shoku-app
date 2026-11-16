@@ -55,6 +55,9 @@ open class ShokuApplication : Application() {
                     .onSuccess { prefs.edit().putBoolean("onlineOrders_v1", true).apply() }
                     .onFailure { android.util.Log.e("Shoku", "Tidying online orders failed", it) }
             }
+            // One time: AI memories become one per food, "AI said 200 g, it was 1 serving (~150 g)".
+            runCatching { app.shoku.data.ai.AiMemory.upgrade(repository.weightOf()) }
+                .onFailure { android.util.Log.e("Shoku", "Upgrading AI memories failed", it) }
             if (!prefs.getBoolean("foodFamilies_v1", false)) {
                 runCatching { repository.applyFoodFamilies() }
                     .onSuccess { prefs.edit().putBoolean("foodFamilies_v1", true).apply() }

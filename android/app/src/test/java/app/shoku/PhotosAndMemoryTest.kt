@@ -71,7 +71,7 @@ class PhotosAndMemoryTest {
             listOf(item("Boiled Rice", "r1", 150.0, "rice"), item("Mix Dal", "d1", 150.0, "dal")), "Dinner",
         )
         val m = AiMemory.all().associateBy { it.kind + ":" + it.line }
-        assertTrue(m.keys.any { it == "fix:\"rice\" is Boiled Rice (150 g), not Basmati rice, cooked (200 g)" })
+        assertTrue(m.keys.any { it == "fix:\"rice\": AI said Basmati rice, cooked (200 g), it was Boiled Rice (150 g)" })
         assertTrue(m.keys.any { it == "match:\"dal\" is their Mix Dal (150 g)" })
         // The same fix again strengthens it rather than adding a line; the latest amount wins.
         AiMemory.learnFromReview(listOf(item("Basmati rice, cooked", "b1", 220.0, "rice")), listOf(item("Boiled Rice", "r1", 160.0, "rice")), "Dinner")
@@ -131,9 +131,38 @@ class PhotosAndMemoryTest {
         AiMemory.learnFromReview(listOf(item("Crushed Gobhi Soya Paneer", "g1", 200.0, "bowl of gobhi sabzi")), listOf(item("Crushed Gobhi Soya Paneer", "g1", 200.0, "bowl of gobhi sabzi")), "Dinner")
         assertEquals(1, AiMemory.all().count { it.kind == AiMemory.MATCH })
         val e = LogEntry("e", "2026-11-16", "Dinner", "batch", "g1", "Crushed Gobhi Soya Paneer", "g", 200.0, 386.0, 30.0, null, source = "ai")
-        AiMemory.learnFromEdit(e, e.copy(unit = "serving", qty = 1.0))
-        assertTrue(AiMemory.all().none { it.kind == AiMemory.MATCH })
-        assertEquals("Crushed Gobhi Soya Paneer: 1 serving, not 200 g", AiMemory.all().single().line)
+        AiMemory.learnFromEdit(e, e.copy(unit = "serving", qty = 1.0, kcal = 289.5))
+        assertEquals("Crushed Gobhi Soya Paneer: AI said 200 g, it was 1 serving (~150 g)", AiMemory.all().single().line)
+        // The AI guessing 200 g again and that being kept doesn't undo the correction.
+        AiMemory.learnFromReview(listOf(item("Crushed Gobhi Soya Paneer", "g1", 200.0, "gobhi")), listOf(item("Crushed Gobhi Soya Paneer", "g1", 200.0, "gobhi")), "Dinner")
+        val only = AiMemory.all().single()
+        assertEquals(AiMemory.FIX, only.kind)
+        assertTrue("1 serving (~150 g)" in only.line)
+        assertEquals(3, only.count) // the first match, the correction, the repeat
+        // A newer correction replaces the amount: still one memory for the food.
+        AiMemory.learnFromEdit(e, e.copy(unit = "serving", qty = 1.5, kcal = 434.25))
+        assertEquals("Crushed Gobhi Soya Paneer: AI said 200 g, it was 1.5 servings (~225 g)", AiMemory.all().single().line)
+    }
+
+    @Test fun olderMemoriesBecomeOnePerFood() {
+        fresh()
+        // As 0.9.43 stored them on the phone.
+        val old = listOf(
+            AiMemory.Memory("amount|g1|Dinner", listOf("crushed", "gobhi"), "Crushed Gobhi Soya Paneer: 1 serving, not 200 g", AiMemory.FIX, "Dinner", at = 3),
+            AiMemory.Memory("match|[bowl, crushed, gobhi]|g1", listOf("gobhi"), "\"bowl of crushed gobhi soya paneer sabzi\" is their Crushed Gobhi Soya Paneer (200 g)", AiMemory.MATCH, "Dinner", at = 2),
+            AiMemory.Memory("food|[black, tea]|t1", listOf("tea"), "Black tea, unsweetened (250 g) was really Coca-Cola Fuze Tea (135 ml)", AiMemory.FIX, "Dinner", at = 1),
+            AiMemory.Memory("match|[pickle, side]|p1", listOf("pickle"), "\"pickle on the side\" is their Mango carrot pickle (2 tsp)", AiMemory.MATCH, "Dinner", at = 1),
+        )
+        context.getSharedPreferences("ai_memory", 0).edit().putString("memories", kotlinx.serialization.json.Json.encodeToString(
+            kotlinx.serialization.builtins.ListSerializer(AiMemory.Memory.serializer()), old)).commit()
+        AiMemory.upgrade { id, qty, unit -> if (id == "g1" && unit == "serving") "${(qty * 150).toInt()} g" else null }
+        val lines = AiMemory.all().map { it.line }.toSet()
+        assertEquals(setOf(
+            "Crushed Gobhi Soya Paneer: AI said 200 g, it was 1 serving (~150 g)",
+            "AI said Black tea, unsweetened (250 g), it was Coca-Cola Fuze Tea (135 ml)",
+            "\"pickle on the side\" is their Mango carrot pickle (2 tsp)",
+        ), lines)
+        assertEquals(2, AiMemory.all().first { "Gobhi" in it.line }.count)
     }
 
     @Test fun homeDishesAndReferencePhotos() {

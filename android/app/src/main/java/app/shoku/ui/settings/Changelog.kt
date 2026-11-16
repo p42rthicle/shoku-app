@@ -25,6 +25,14 @@ data class Release(val version: String, val date: String, val changes: List<Stri
  */
 val CHANGELOG = listOf(
     Release(
+        "0.9.44", "16 Nov 2026",
+        listOf(
+            "Shoku AI keeps one memory per food, with what you changed last: \"Crushed Gobhi Soya Paneer: AI said 200 g, it was 1 serving (~150 g)\"",
+            "Your correction stays even when you later keep one of the AI's guesses for that food; a newer correction replaces the amount",
+            "Existing memories are tidied into this form (the gobhi 200 g match is folded into your correction)",
+        ),
+    ),
+    Release(
         "0.9.43", "16 Nov 2026",
         listOf(
             "Photo logs have a place tag, At home or Eaten out: At home when your fridge batches are on the plate (or the dishes look like yours), Eaten out for a takeaway box or restaurant plate; one tap changes it",

@@ -85,6 +85,19 @@ class ShokuRepository(private val db: ShokuDatabase, scope: CoroutineScope) {
 
     // ---------- Library editing ----------
 
+    /** "150 g": the weight of [qty] [unit] of a food, dish or batch, by calories (null when it has no weight). */
+    suspend fun weightOf(): (String, Double, String) -> String? {
+        val library = currentLibrary()
+        return { id, qty, unit ->
+            listOf(app.shoku.data.db.RefType.BATCH, app.shoku.data.db.RefType.DISH, app.shoku.data.db.RefType.FOOD).firstNotNullOfOrNull { type ->
+                val per = library.perUnitOf(type, id, unit)?.kcal ?: return@firstNotNullOfOrNull null
+                app.shoku.domain.WEIGHT_UNITS.firstNotNullOfOrNull { w -> library.perUnitOf(type, id, w)?.kcal?.takeIf { it > 0 }?.let { w to it } }
+                    ?.let { (w, perW) -> qty * per / perW }?.takeIf { it > 0 }
+                    ?.let { g -> "${if (g >= 50) Math.round(g / 5) * 5 else Math.round(g)} ${app.shoku.domain.WEIGHT_UNITS.first { w -> library.perUnitOf(type, id, w) != null }}" }
+            }
+        }
+    }
+
     private suspend fun currentLibrary() = Library(
         lib.allFoods().filter { !it.deleted }, lib.allDishes().filter { !it.deleted },
         lib.allDishIngredients().filter { !it.deleted }, lib.allBatches().filter { !it.deleted },
