@@ -73,6 +73,10 @@ object Duplicates {
         val wa = (ka.words - brandWords).ifEmpty { ka.words }; val wb = (kb.words - brandWords).ifEmpty { kb.words }
         if (wa.isEmpty() || wb.isEmpty()) return false
         if (!similarNutrition(a, b)) return false
+        // A product named after its brand ("Nutella" by Ferrero) is the food you keep under that brand
+        // ("Hazelnut chocolate spread" [Nutella]); the values above already agree.
+        val brandA = ba.split(" ").filter { it.isNotEmpty() }.toSet(); val brandB = bb.split(" ").filter { it.isNotEmpty() }.toSet()
+        if ((brandB.isNotEmpty() && ka.words == brandB) || (brandA.isNotEmpty() && kb.words == brandA)) return true
         // A generic and a product of the same name are a family, not a duplicate.
         if ((a.kind == FoodKind.GENERIC) != (b.kind == FoodKind.GENERIC) && (ba.isEmpty() != bb.isEmpty())) return false
         return when {

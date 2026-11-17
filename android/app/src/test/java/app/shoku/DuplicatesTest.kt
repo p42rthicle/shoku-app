@@ -61,4 +61,16 @@ class DuplicatesTest {
         val l = Library(listOf(tomato, small), emptyList(), emptyList(), emptyList(), emptyList())
         assertEquals(listOf("t0"), Duplicates.matches(l, Food("new", "Tomato", "g", 100.0, 18.0, 0.9, 1.2, kind = FoodKind.GENERIC)).map { it.id })
     }
+
+    @Test
+    fun aProductNamedAfterABrandIsYourFoodOfThatBrand() {
+        // Scanned: "Nutella" by Ferrero. Yours: "Hazelnut chocolate spread" [Nutella], same values.
+        val mine = Food("n1", "Hazelnut chocolate spread", "g", 100.0, 539.0, 6.3, 0.0, brand = "Nutella", parentId = "cs")
+        val scanned = Food("x", "Nutella", "g", 100.0, 539.0, 6.3, null, brand = "Ferrero", barcode = "3017620422003")
+        val other = Food("o1", "Hazelnut spread", "g", 100.0, 560.0, 5.0, null, brand = "Nusspli")
+        val library = Library(listOf(mine, other), emptyList(), emptyList(), emptyList(), emptyList(), emptyList())
+        assertEquals(listOf("n1"), Duplicates.matches(library, scanned).map { it.id })
+        // Different values: not the same product, whatever the names say.
+        assertTrue(Duplicates.matches(library, scanned.copy(kcal = 400.0)).isEmpty())
+    }
 }

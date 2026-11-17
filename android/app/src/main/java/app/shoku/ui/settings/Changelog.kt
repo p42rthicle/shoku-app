@@ -25,6 +25,12 @@ data class Release(val version: String, val date: String, val changes: List<Stri
  */
 val CHANGELOG = listOf(
     Release(
+        "0.9.58", "17 Nov 2026",
+        listOf(
+            "Scanning a product named after a brand finds your food of that brand: Nutella (Ferrero) offers your \"Hazelnut chocolate spread\" [Nutella] when the values match, and Use this saves the barcode on it",
+        ),
+    ),
+    Release(
         "0.9.57", "17 Nov 2026",
         listOf(
             "Sharing a receipt from the Lidl app opens the Shoku you already have, on Stock, instead of a second copy",
