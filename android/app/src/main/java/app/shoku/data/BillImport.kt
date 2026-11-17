@@ -36,6 +36,8 @@ object BillImport {
         data object Idle : State
         data class Working(val step: String) : State
         data class Failed(val message: String) : State
+        /** Read, but the same lines as the bill added at [earlier]: nothing added unless you say "Add it again". */
+        data class Duplicate(val earlier: Long) : State
     }
 
     /** One line of a bill, as added. [source]: "yours", "off" (Open Food Facts), "database" or "estimate". */
@@ -91,6 +93,7 @@ object BillImport {
     /** Reads [uris] (screenshots or photos of one bill) and adds it to stock. */
     fun start(shoku: ShokuApplication, uris: List<Uri>) {
         if (state.value is State.Working || uris.isEmpty()) return
+        waiting = null
         state.value = State.Working("Reading your bill…")
         shoku.appScope.launch {
             try {
@@ -120,6 +123,35 @@ object BillImport {
         val lib = shoku.repository.library.first()
         val keys = ai.libraryKeys(lib)
         val result = ai.bill(pieces, keys)
+        // The same receipt shared twice would double the stock: ask first.
+        sameAs(result, bills.value)?.let { earlier ->
+            waiting = result
+            state.value = State.Duplicate(earlier.at)
+            notify(shoku, "Already added?", "This bill looks like the one you added on ${dayTime(earlier.at)}. Nothing was added yet.")
+            return
+        }
+        addRead(shoku, result)
+    }
+
+    /** A bill held back as a duplicate, waiting for "Add it again". */
+    private var waiting: app.shoku.data.ai.AiBillResult? = null
+
+    /** "Add it again": the bill held back as a duplicate goes into stock after all. */
+    fun addAgain(shoku: ShokuApplication) {
+        val result = waiting ?: return
+        waiting = null
+        state.value = State.Working("Adding your bill…")
+        shoku.appScope.launch {
+            try { addRead(shoku, result) } catch (e: Throwable) {
+                if (e is CancellationException) throw e
+                state.value = State.Failed(e.message ?: "Couldn't add the bill")
+            }
+        }
+    }
+
+    private suspend fun addRead(shoku: ShokuApplication, result: app.shoku.data.ai.AiBillResult) {
+        val lib = shoku.repository.library.first()
+        val keys = AiClient().libraryKeys(lib)
         val bill = add(Deps(shoku.repository, shoku.home, shoku.reference), lib, keys, result) { state.value = State.Working(it) }
         val lines = bill.lines
         // Nothing readable (a dark or blurry photo, not a bill): say so instead of "0 items".
@@ -166,22 +198,32 @@ object BillImport {
             var food: Food? = null
             var source = "estimate"
             var packQty: Double? = null
+            // Found again (the same Open Food Facts product, the same database food): yours already, kept as it is.
+            var existed = false
             if (item.packaged && !item.search.isNullOrBlank()) {
                 if (offCalls++ > 0) d.pause()
                 step("Looking up ${item.name} on Open Food Facts…")
                 val hit = runCatching { item.brand?.let { b -> d.offSearch("${item.search} $b") } ?: d.offSearch(item.search!!) }.getOrNull()
                 if (hit != null) {
                     val (f, portions) = hit.toLibraryFood()
-                    repo.saveFood(f, updatePast = false)
-                    if (portions.isNotEmpty()) repo.savePortions(portions)
-                    food = f; source = "off"; packQty = hit.packQty
+                    val mine = repo.library.first().foods[f.id]
+                    if (mine != null) {
+                        food = mine; source = "yours"; existed = true
+                    } else {
+                        repo.saveFood(f, updatePast = false)
+                        if (portions.isNotEmpty()) repo.savePortions(portions)
+                        food = f; source = "off"
+                    }
+                    packQty = hit.packQty
                 }
             }
             if (food == null && !item.packaged && d.reference != null) {
                 val r = (item.search?.let { d.reference.search(it, 3) }.orEmpty() + d.reference.search(item.name, 3)).firstOrNull()
                 if (r != null) {
+                    val before = repo.library.first().foods.keys
                     val id = repo.adoptReference(r)
-                    food = repo.library.first { it.foods.containsKey(id) }.foods.getValue(id); source = "database"
+                    existed = id in before
+                    food = repo.library.first { it.foods.containsKey(id) }.foods.getValue(id); source = if (existed) "yours" else "database"
                 }
             }
             if (food == null) {
@@ -203,8 +245,9 @@ object BillImport {
             val qty = (if (item.packs != null && packQty != null && packQty > 0) item.packs * packQty else null)
                 ?: amountIn(now, food, item) ?: continue
             packQty?.let { PackSizes.remember(food.id, it) }
+            val newStock = home.stockFor(food.id) == null
             home.addFoodStock(food, qty)
-            lines += Line(newId(), item.said, food.name, food.id, qty, food.unit, source, created = true, newStock = true, brand = food.brand)
+            lines += Line(newId(), item.said, food.name, food.id, qty, food.unit, source, created = !existed, newStock = newStock, brand = food.brand)
         }
         return Bill(System.currentTimeMillis(), lines, result.skipped)
     }
@@ -285,7 +328,36 @@ object BillImport {
     /** A "not food" line being added after all: off the list. */
     fun dropSkipped(text: String) = save(bills.value.map { b -> b.copy(skipped = b.skipped - text) })
 
-    fun dismissFailure() { if (state.value is State.Failed) state.value = State.Idle }
+    fun dismissFailure() {
+        if (state.value is State.Failed || state.value is State.Duplicate) { state.value = State.Idle; waiting = null }
+    }
+
+    /**
+     * The earlier bill [result] repeats, if any: most of its printed lines the same (a receipt shared or
+     * photographed twice). Weighed things print their weight, so a week's identical shop rarely matches;
+     * when it does, "Add it again" is one tap.
+     */
+    fun sameAs(result: app.shoku.data.ai.AiBillResult, earlier: List<Bill>): Bill? {
+        fun key(s: String) = s.lowercase().filter { it.isLetterOrDigit() }
+        val now = (result.items.map { it.said } + result.skipped).map(::key).filter { it.isNotEmpty() }
+        if (now.size < 3) return null
+        return earlier.firstOrNull { b ->
+            val before = (b.lines.map { it.said } + b.skipped).map(::key).toMutableList()
+            val same = now.count { before.remove(it) }
+            same >= 0.8 * now.size
+        }
+    }
+
+    fun dayTime(at: Long): String =
+        java.time.format.DateTimeFormatter.ofPattern("d MMM, HH:mm", java.util.Locale.ENGLISH).format(java.time.Instant.ofEpochMilli(at).atZone(java.time.ZoneId.systemDefault()))
+
+    /** Undo a whole bill: every line back out of stock (as Remove does), and the bill is forgotten. */
+    suspend fun undo(shoku: ShokuApplication, bill: Bill) = undo(shoku.repository, shoku.home, bill)
+
+    suspend fun undo(repo: ShokuRepository, home: HomeRepository, bill: Bill) {
+        for (l in bill.lines) undoStock(repo, home, l)
+        save(bills.value.filter { it.at != bill.at })
+    }
 
     private fun notify(shoku: ShokuApplication, title: String, text: String) {
         Reminders.ensureChannel(shoku)

@@ -185,4 +185,50 @@ class BillImportTest {
         val moves = db.home().allMoves().filter { !it.deleted && it.itemId == item.id }.sumOf { it.delta }
         assertEquals(500.0, item.countQty!! + moves, 0.0) // the 500 g stay
     }
+
+    @Test fun theSameBillTwiceIsHeldBack() = runBlocking {
+        val lib = repo.library.first()
+        val milkLine = AiBillItem("H-Milch 1,5% 0,85 x 2", matchKey = key(lib, "m1"), name = "Low-fat milk", unit = "ml", qty = 2000.0)
+        read(milkLine, pepper, chickpeas, skipped = listOf("Pfand 0,25 EM"))
+        // Shared again: the same lines (spacing aside) are spotted.
+        val again = AiBillResult(listOf(milkLine.copy(said = "H-Milch 1,5%  0,85 x 2"), pepper, chickpeas), listOf("Pfand 0,25 EM"))
+        assertTrue(BillImport.sameAs(again, BillImport.bills.value) != null)
+        // A different shop with one thing in common is not.
+        val other = AiBillResult(listOf(pepper, AiBillItem("Gurken", name = "Cucumber", unit = "g", qty = 400.0), AiBillItem("Koriander", name = "Coriander", unit = "g", qty = 30.0)))
+        assertNull(BillImport.sameAs(other, BillImport.bills.value))
+        // Too short to tell: never held back.
+        assertNull(BillImport.sameAs(AiBillResult(listOf(pepper)), BillImport.bills.value))
+    }
+
+    @Test fun undoTakesAWholeBillBackOut() = runBlocking {
+        home.addFoodStock(milk, 500.0)
+        val lib = repo.library.first()
+        val bill = read(AiBillItem("H-Milch", matchKey = key(lib, "m1"), name = "Low-fat milk", unit = "ml", qty = 2000.0), pepper)
+        val pepperId = bill.lines.single { it.said.startsWith("Paprika") }.foodId
+        BillImport.undo(repo, home, bill)
+        // Milk back to the 500 ml it had; the pepper the bill made is gone with its stock; the bill is forgotten.
+        val item = stockOf("m1")!!
+        val moves = db.home().allMoves().filter { !it.deleted && it.itemId == item.id }.sumOf { it.delta }
+        assertEquals(500.0, (item.countQty ?: 0.0) + moves, 0.0)
+        assertNull(stockOf(pepperId))
+        assertNull(repo.library.first().foods[pepperId])
+        assertTrue(BillImport.bills.value.none { it.at == bill.at })
+    }
+
+    @Test fun aProductFoundAgainIsYoursAndUndoKeepsIt() = runBlocking {
+        // The first bill made Kichererbsen from Open Food Facts; the same receipt read again finds that product again.
+        val first = read(chickpeas)
+        val id = first.lines.single().foodId
+        val second = read(chickpeas)
+        val again = second.lines.single()
+        assertEquals(id, again.foodId)
+        assertEquals("yours", again.source)
+        assertTrue(!again.created && !again.newStock)
+        // Undoing the second bill takes only its 1200 g back off: the food and the first bill's stock stay.
+        BillImport.undo(repo, home, second)
+        val item = stockOf(id)!!
+        val moves = db.home().allMoves().filter { !it.deleted && it.itemId == item.id }.sumOf { it.delta }
+        assertEquals(1200.0, (item.countQty ?: 0.0) + moves, 0.0)
+        assertTrue(repo.library.first().foods.containsKey(id))
+    }
 }

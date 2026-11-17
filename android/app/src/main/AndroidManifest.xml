@@ -82,18 +82,21 @@
             </intent-filter>
         </activity-alias>
         <!-- Share a receipt (screenshot) from another app, e.g. the Lidl app: add that bill to stock. -->
-        <activity-alias
+        <activity
             android:name=".BillShare"
             android:exported="true"
             android:label="Add bill to stock"
-            android:targetActivity=".MainActivity">
+            android:taskAffinity=""
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.NoDisplay">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <action android:name="android.intent.action.SEND_MULTIPLE" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="image/*" />
             </intent-filter>
-        </activity-alias>
+        </activity>
         <receiver
             android:name=".ui.widget.TodayWidget"
             android:exported="true"

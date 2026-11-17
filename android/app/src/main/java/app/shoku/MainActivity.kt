@@ -32,18 +32,6 @@ class MainActivity : ComponentActivity() {
 
     /** Taps on reminders: open Add (optionally with Describe) for a meal, or a tab. */
     private fun handle(intent: android.content.Intent?) {
-        // Shared from another app (the Lidl app's receipt): add that bill to stock.
-        if (intent != null && intent.type?.startsWith("image/") == true &&
-            (intent.action == android.content.Intent.ACTION_SEND || intent.action == android.content.Intent.ACTION_SEND_MULTIPLE)
-        ) {
-            val uris = if (intent.action == android.content.Intent.ACTION_SEND) {
-                listOfNotNull(intent.getParcelableExtra(android.content.Intent.EXTRA_STREAM, android.net.Uri::class.java))
-            } else intent.getParcelableArrayListExtra(android.content.Intent.EXTRA_STREAM, android.net.Uri::class.java).orEmpty()
-            app.shoku.data.BillImport.start(application as ShokuApplication, uris)
-            LaunchRequests.pending.value = LaunchRequest("stock")
-            intent.action = null
-            return
-        }
         intent?.data?.let { uri -> DeepLinks.parse(uri)?.let { LaunchRequests.pending.value = it }; intent.data = null; return }
         val open = intent?.getStringExtra(app.shoku.data.notify.Reminders.EXTRA_OPEN) ?: return
         LaunchRequests.pending.value = LaunchRequest(open, intent.getStringExtra(app.shoku.data.notify.Reminders.EXTRA_MEAL), intent.getStringExtra("barcode"))

@@ -25,6 +25,14 @@ data class Release(val version: String, val date: String, val changes: List<Stri
  */
 val CHANGELOG = listOf(
     Release(
+        "0.9.57", "17 Nov 2026",
+        listOf(
+            "Sharing a receipt from the Lidl app opens the Shoku you already have, on Stock, instead of a second copy",
+            "The same bill shared twice is spotted: \"Already added?\" with OK or Add it again, so stock isn't doubled",
+            "Stock › Bill › Recent bills: undo a whole bill, everything it added taken back out",
+        ),
+    ),
+    Release(
         "0.9.56", "17 Nov 2026",
         listOf(
             "Fixed: a bill's red bell pepper went into Spices as have/low/out (it read \"pepper\"), so Edit showed no amount; fresh vegetables and herbs now go to the fridge, counted, and the one from your bill is moved",

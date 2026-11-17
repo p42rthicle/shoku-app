@@ -322,6 +322,12 @@ private fun LibraryList(
                         when {
                             st is app.shoku.data.BillImport.State.Working -> { { BillCard(if (st.step.startsWith("Reading")) "Reading your bill…" else st.step, "You can leave this screen; a notification says when it's done.", null) } }
                             st is app.shoku.data.BillImport.State.Failed -> { { BillCard("Couldn't add the bill", st.message, "OK") { app.shoku.data.BillImport.dismissFailure() } } }
+                            st is app.shoku.data.BillImport.State.Duplicate -> { {
+                                BillCard(
+                                    "Already added?", "This bill looks like the one added on ${app.shoku.data.BillImport.dayTime(st.earlier)}. Nothing was added.",
+                                    "OK", { app.shoku.data.BillImport.dismissFailure() }, "Add it again", { app.shoku.data.BillImport.addAgain(shoku) },
+                                )
+                            } }
                             toCheck > 0 -> { { BillCard("Check $toCheck new ${if (toCheck == 1) "item" else "items"} from your bill", "Already in stock. Keep, edit, replace or remove them.", "Review") { reviewingBill = true } } }
                             else -> null
                         }
@@ -406,6 +412,29 @@ private fun LibraryList(
                     billGallery.launch(androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly))
                 })
                 app.shoku.ui.components.SecondaryButton("Photo of a paper bill", onClick = { choosingBill = false; billCamera.launch(billPhotoUri) })
+                // Added the wrong bill, or the same one twice: take a whole bill back out.
+                val recent = bills.filter { it.lines.isNotEmpty() }.sortedByDescending { it.at }.take(3)
+                if (recent.isNotEmpty()) {
+                    Text("Recent bills", style = MaterialTheme.typography.titleSmall, color = app.shoku.ui.theme.ShokuColors.Muted, modifier = Modifier.padding(top = 6.dp))
+                    val undoScope = androidx.compose.runtime.rememberCoroutineScope()
+                    recent.forEach { b ->
+                        var confirm by remember(b.at) { mutableStateOf(false) }
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text("${app.shoku.data.BillImport.dayTime(b.at)} · ${b.lines.size} ${if (b.lines.size == 1) "item" else "items"}",
+                                style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                            Text(
+                                if (confirm) "Tap again to undo" else "Undo",
+                                style = MaterialTheme.typography.labelLarge, color = app.shoku.ui.theme.ShokuColors.Over,
+                                modifier = Modifier.clip(app.shoku.ui.theme.ShokuShapes.Button).clickable {
+                                    if (!confirm) confirm = true else undoScope.launch {
+                                        app.shoku.data.BillImport.undo(shoku, b)
+                                        toast("Bill undone: ${b.lines.size} ${if (b.lines.size == 1) "item" else "items"} taken out of stock")
+                                    }
+                                }.padding(horizontal = 8.dp, vertical = 10.dp),
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -642,16 +671,25 @@ private fun CookPicker(library: Library, onPick: (String) -> Unit, onNewDish: (S
 
 /** The card above Stock about a bill: reading it, or new items to check. */
 @Composable
-private fun BillCard(title: String, text: String, action: String?, onAction: () -> Unit = {}) {
-    app.shoku.ui.components.OutlinedCard(Modifier.fillMaxWidth(), onClick = if (action != null) onAction else null) {
+private fun BillCard(title: String, text: String, action: String?, onAction: () -> Unit = {}, second: String? = null, onSecond: () -> Unit = {}) {
+    // With two choices, only the chips act (a tap on the card picks neither).
+    app.shoku.ui.components.OutlinedCard(Modifier.fillMaxWidth(), onClick = if (action != null && second == null) onAction else null) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(title, style = MaterialTheme.typography.titleMedium)
                 Text(text, style = MaterialTheme.typography.bodySmall, color = app.shoku.ui.theme.ShokuColors.Muted)
             }
+            if (second != null) {
+                Spacer(Modifier.width(10.dp))
+                Box(Modifier.clip(androidx.compose.foundation.shape.CircleShape).clickable(onClick = onSecond)) {
+                    app.shoku.ui.components.StatusChip(second, app.shoku.ui.components.ChipStyle.Tinted)
+                }
+            }
             if (action != null) {
                 Spacer(Modifier.width(10.dp))
-                app.shoku.ui.components.StatusChip(action, app.shoku.ui.components.ChipStyle.Filled)
+                Box(Modifier.clip(androidx.compose.foundation.shape.CircleShape).clickable(enabled = second != null, onClick = onAction)) {
+                    app.shoku.ui.components.StatusChip(action, app.shoku.ui.components.ChipStyle.Filled)
+                }
             }
         }
     }
