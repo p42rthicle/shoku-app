@@ -204,10 +204,11 @@ class TodayViewModel(
     }
 
     /** Adds the day's plan as one group; [done] gets the entries for Undo. */
-    fun addPlan(p: app.shoku.domain.PlannedDay, done: (List<LogEntry>) -> Unit) = viewModelScope.launch {
-        p.entries.forEach { repo.add(it) }
+    /** Adds the ticked items of the day's plan. */
+    fun addEntries(entries: List<LogEntry>, done: (List<LogEntry>) -> Unit) = viewModelScope.launch {
+        entries.forEach { repo.add(it) }
         overrides.value = date.value to emptyMap()
-        done(p.entries)
+        done(entries)
     }
 
     fun toggleSupplement(s: app.shoku.data.db.Supplement, taken: Boolean) = viewModelScope.launch { home?.setTaken(s, date.value, !taken) }

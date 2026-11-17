@@ -123,11 +123,17 @@ fun LazyListScope.stockSection(
     val today = LocalDate.now()
     val searching = query.isNotBlank()
     fun hit(name: String) = !searching || app.shoku.domain.matchesAll(app.shoku.domain.searchKey(name), query)
+    // A brand finds everything of that brand ("SDS", "Haldi Ram" = Haldiram's: spaces and apostrophes don't matter).
+    val compactQuery = app.shoku.domain.searchKey(query).filter { it.isLetterOrDigit() }
+    fun brandHit(foodId: String?): Boolean {
+        val b = foodId?.let { view.brands[it] } ?: return false
+        return hit(b) || (compactQuery.length >= 3 && compactQuery in app.shoku.domain.searchKey(b).filter { it.isLetterOrDigit() })
+    }
     val open = if (searching) open + listOf("shop", "week") + StockPlaces.ALL.map { "place-$it" } else open
     val view = view.copy(
-        levels = view.levels.filter { hit(it.item.name) },
-        shopping = view.shopping.filter { hit(it.name) },
-        week = view.week.filter { hit(it.name) },
+        levels = view.levels.filter { hit(it.item.name) || brandHit(it.item.foodId) },
+        shopping = view.shopping.filter { hit(it.name) || brandHit(it.foodId) },
+        week = view.week.filter { hit(it.name) || brandHit(it.foodId) },
     )
     item(key = "stock-add") {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {

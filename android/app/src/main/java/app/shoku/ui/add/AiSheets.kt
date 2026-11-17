@@ -197,7 +197,7 @@ fun AiReviewSheet(
             }
             Text(
                 if (items.isEmpty()) "Nothing recognisable came back. Try describing it differently."
-                else "Tap an item to change the amount. ~ means estimated.",
+                else "Untick anything you don't want. Tap an item to change the amount. ~ means estimated.",
                 style = MaterialTheme.typography.bodyMedium, color = ShokuColors.Muted,
             )
             Spacer(Modifier.height(8.dp))
@@ -205,15 +205,7 @@ fun AiReviewSheet(
                 items.forEachIndexed { i, it ->
                     if (i > 0) Hairline()
                     Row(Modifier.fillMaxWidth().clickable { editing = i }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            Modifier
-                                .size(26.dp)
-                                .clip(CircleShape)
-                                .background(if (included[i]) ShokuColors.Fill else ShokuColors.Paper)
-                                .then(if (!included[i]) Modifier.border(1.5.dp, ShokuColors.Planned, CircleShape) else Modifier)
-                                .clickable { included[i] = !included[i] },
-                            contentAlignment = Alignment.Center,
-                        ) { if (included[i]) Icon(Icons.Rounded.Check, "Included", tint = ShokuColors.Paper, modifier = Modifier.size(16.dp)) }
+                        app.shoku.ui.components.IncludeTick(included[i], { included[i] = !included[i] })
                         Spacer(Modifier.width(14.dp))
                         Column(Modifier.weight(1f)) {
                             app.shoku.ui.components.NameWithTag(it.name, it.brand, MaterialTheme.typography.titleMedium)

@@ -25,6 +25,17 @@ data class Release(val version: String, val date: String, val changes: List<Stri
  */
 val CHANGELOG = listOf(
     Release(
+        "0.9.49", "17 Nov 2026",
+        listOf(
+            "Scanned a pack, then read its label (or a photo of the pack)? The two are merged instead of the label replacing everything: name and brand stay from the barcode, the label fills in what was missing, and where they disagree you pick: \"Barcode or label?\" with both values side by side",
+            "After a scan you can always add values from the label, even when the barcode found the product",
+            "Copy an earlier meal, Add as per plan and Remove planned open a list with round ticks first: untick what you don't want",
+            "The AI review says it too: untick anything you don't want",
+            "Searching stock by brand (SDS, Haldiram's) shows everything of that brand",
+            "Belongs to has a small search icon: find any group (Spices, Milk, Rice…) when the suggestions are wrong, or make a new one",
+        ),
+    ),
+    Release(
         "0.9.48", "17 Nov 2026",
         listOf("Stock rows show the brand chip, like the food lists"),
     ),

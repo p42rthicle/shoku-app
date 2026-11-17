@@ -37,6 +37,8 @@ import app.shoku.data.db.RefType
 import app.shoku.data.BarcodeResult
 import app.shoku.data.FoodDraft
 import app.shoku.data.FoodLookup
+import app.shoku.data.DraftMerge
+import androidx.compose.foundation.horizontalScroll
 import app.shoku.data.PackSizes
 import app.shoku.data.ai.AiClient
 import app.shoku.data.db.Food
@@ -64,6 +66,8 @@ fun NewFoodEditor(
     onPackPhoto: ((String?) -> Unit)? = null,
     /** Picked "Use this" on a food the library already has. */
     onUseExisting: ((Food) -> Unit)? = null,
+    /** Barcode or photo picked for a field they disagree on: the updated draft. */
+    onDraft: ((FoodDraft) -> Unit)? = null,
 ) {
     val pending = remember(draft) { mutableStateOf<List<FoodPortion>>(emptyList()) }
     // Is it already in the library? (A scan of the wraps you have under another name.)
@@ -75,12 +79,16 @@ fun NewFoodEditor(
     }
     val uses = remember(logs.size) { logs.filter { !it.deleted && it.refType == RefType.FOOD }.groupingBy { it.refId }.eachCount() }
     val barcode = draft.prefill.barcode
+    val photo = if (draft.photoKind == "pack") "Pack photo" else "Label"
+    // A new value chosen below re-seeds the fields.
+    androidx.compose.runtime.key(draft.prefill) {
     FoodEditor(
         food = null,
         usedIn = 0,
         prefill = draft.prefill,
         familyChoices = draft.families,
         title = when {
+            draft.merged != null -> "Barcode and ${photo.lowercase()}"
             draft.fromPack -> "From the photos of the pack"
             draft.fromLabel -> "Read from the label"
             draft.found -> "Found on Open Food Facts"
@@ -88,6 +96,7 @@ fun NewFoodEditor(
             else -> "New food"
         },
         note = when {
+            draft.merged != null -> draft.note ?: "Name and brand from the barcode, the numbers from the ${photo.lowercase()}. Where they disagree, tap the one to keep."
             draft.fromPack && draft.fromLabel -> listOfNotNull("Name and brand from the pack, values from its label. Check them, then save.", draft.note).joinToString(" ")
             draft.fromPack -> listOfNotNull("Brand and name from the pack; the values are typical for this kind of product. Check them, then save.", draft.note).joinToString(" ")
             draft.fromLabel -> listOfNotNull("Check the numbers against the label, then save.", draft.note).joinToString(" ")
@@ -95,8 +104,26 @@ fun NewFoodEditor(
             barcode != null -> draft.note ?: "Barcode $barcode isn't in Open Food Facts. Take a photo of the label, or type the values (per 100 g or 100 ml)."
             else -> "Type the values per 100 g (or 100 ml, 1 pc), or read them from the label."
         },
-        header = if (matches.isEmpty() || onUseExisting == null) null else { {
-            Column(
+        header = if ((matches.isEmpty() || onUseExisting == null) && draft.choices.isEmpty()) null else { {
+            if (draft.choices.isNotEmpty()) Column(
+                Modifier.fillMaxWidth().clip(ShokuShapes.Card).background(ShokuColors.Tint).padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text("Barcode or ${photo.lowercase()}?", style = MaterialTheme.typography.titleMedium)
+                draft.choices.forEach { c ->
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(c.label, style = MaterialTheme.typography.bodySmall, color = ShokuColors.Muted)
+                        Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            listOf(false to "Barcode · ${c.barcode}", true to "$photo · ${c.photo}").forEach { (fromPhoto, text) ->
+                                Box(Modifier.clip(CircleShape).clickable { onDraft?.invoke(DraftMerge.choose(draft, c.field, fromPhoto)) }) {
+                                    StatusChip(text, if (c.fromPhoto == fromPhoto) ChipStyle.Filled else ChipStyle.Tinted)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if (matches.isNotEmpty() && onUseExisting != null) Column(
                 Modifier.fillMaxWidth().clip(ShokuShapes.Card).background(ShokuColors.Tint).padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -117,9 +144,10 @@ fun NewFoodEditor(
                     style = MaterialTheme.typography.bodySmall, color = ShokuColors.Muted)
             }
         } },
-        extraActions = if (draft.found) emptyList() else listOfNotNull(
-            onReadLabel?.let { f -> "Read the label with a photo" to { f(barcode) } },
-            onPackPhoto?.let { f -> "No label? Take a photo of the pack" to { f(barcode) } },
+        // After a scan the label can still fill in or correct values (it's merged with the barcode's, not replacing it).
+        extraActions = if (draft.found && barcode == null) emptyList() else listOfNotNull(
+            onReadLabel?.let { f -> (if (draft.found) "Add values from the label" else "Read the label with a photo") to { f(barcode) } },
+            onPackPhoto?.let { f -> (if (draft.found) "Or a photo of the pack" else "No label? Take a photo of the pack") to { f(barcode) } },
         ),
         // FoodEditor hands over the units first, then the food. The pack's serving is only suggested.
         portions = emptyList(),
@@ -129,6 +157,7 @@ fun NewFoodEditor(
         onArchive = null,
         onDismiss = onDismiss,
     )
+    }
 }
 
 /** Ways to bring in a food that isn't in the library yet; each ends with it saved there. */
@@ -151,24 +180,28 @@ fun rememberFoodCapture(onFood: (Food) -> Unit): FoodCapture {
     var packing by remember { mutableStateOf(false) } // the pack photo sheet is open
     fun say(text: String) = Toast.makeText(context, text, Toast.LENGTH_LONG).show()
 
+    // What the barcode found, kept while a label or pack photo is read, then merged (barcode first).
+    var base by remember { mutableStateOf<FoodDraft?>(null) }
+    fun combine(d: FoodDraft): FoodDraft = base?.let { DraftMerge.merge(it, d) } ?: d
     val photo = rememberPhotoCapture { jpeg ->
         job = scope.launch {
             busy = "Reading the label…" to true
             // A label photo without a nutrition table still tells what the product is.
             runCatching { FoodLookup.labelOrProduct(ai, app.repository.library.first(), jpeg, labelBarcode) }
-                .onSuccess { d -> if (d == null) say("Couldn't tell what that is. Try the front of the pack, with the name in focus.") else draft = d }
+                .onSuccess { d -> if (d == null) say("Couldn't tell what that is. Try the front of the pack, with the name in focus.") else draft = combine(d) }
                 .onFailure { if (it !is CancellationException) say(it.message ?: "AI request failed") }
             busy = null
         }
     }
-    fun readLabel(barcode: String?) { labelBarcode = barcode; draft = null; photo() }
-    fun packPhoto(barcode: String?) { labelBarcode = barcode; draft = null; packing = true }
+    fun keep() { base = draft?.takeIf { DraftMerge.worthKeeping(it) }?.let { it.merged?.let { (a, _) -> it.copy(prefill = a, merged = null, choices = emptyList()) } ?: it } }
+    fun readLabel(barcode: String?) { labelBarcode = barcode; keep(); draft = null; photo() }
+    fun packPhoto(barcode: String?) { labelBarcode = barcode; keep(); draft = null; packing = true }
     fun identify(photos: List<String>) {
         packing = false
         job = scope.launch {
             busy = "Working out what this is…" to true
             runCatching { FoodLookup.product(ai, app.repository.library.first(), photos, labelBarcode) }
-                .onSuccess { d -> if (d == null) say("Couldn't tell what that is. Try the front of the pack, with the name in focus.") else draft = d }
+                .onSuccess { d -> if (d == null) say("Couldn't tell what that is. Try the front of the pack, with the name in focus.") else draft = combine(d) }
                 .onFailure { if (it !is CancellationException) say(it.message ?: "AI request failed") }
             busy = null
         }
@@ -179,7 +212,7 @@ fun rememberFoodCapture(onFood: (Food) -> Unit): FoodCapture {
             busy = "Looking up $code…" to false
             when (val r = FoodLookup.barcode(app.repository, code)) {
                 is BarcodeResult.Known -> onFood(r.food)
-                is BarcodeResult.New -> draft = r.draft
+                is BarcodeResult.New -> { base = null; draft = r.draft }
                 BarcodeResult.Offline -> say("Couldn't reach Open Food Facts. Check the connection and scan again.")
             }
             busy = null
@@ -211,13 +244,14 @@ fun rememberFoodCapture(onFood: (Food) -> Unit): FoodCapture {
             d,
             onReadLabel = ::readLabel,
             onPackPhoto = ::packPhoto,
-            onUseExisting = { f -> val d0 = d; draft = null; scope.launch { onFood(FoodLookup.useExisting(app.repository, f, d0)) } },
+            onUseExisting = { f -> val d0 = d; draft = null; base = null; scope.launch { onFood(FoodLookup.useExisting(app.repository, f, d0)) } },
             onSave = { food, portions ->
-                draft = null
+                draft = null; base = null
                 d.packQty?.let { PackSizes.remember(food.id, it) }
                 scope.launch { FoodLookup.save(app.repository, food, portions); onFood(food) }
             },
-            onDismiss = { draft = null },
+            onDismiss = { draft = null; base = null },
+            onDraft = { draft = it },
         )
     }
     return capture

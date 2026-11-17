@@ -42,6 +42,27 @@ data class AiItem(
     val brand: String? = null,
 )
 
+/** One line of a supermarket bill: like [AiItem] (said = the line as printed, qty = the total bought), plus how to look it up. */
+@Serializable
+data class AiBillItem(
+    val said: String,
+    @SerialName("match_key") val matchKey: String? = null,
+    val name: String,
+    val unit: String,
+    val qty: Double,
+    val confidence: String = "medium",
+    val estimate: AiEstimate? = null,
+    val brand: String? = null,
+    /** Packs, cans, bottles or pieces bought. */
+    val packs: Double? = null,
+    /** A packaged product worth looking up on Open Food Facts (not loose fruit and vegetables). */
+    val packaged: Boolean = false,
+    /** The product as sold, in German, for a database search. */
+    val search: String? = null,
+)
+
+@Serializable data class AiBillResult(val items: List<AiBillItem>, val skipped: List<String> = emptyList())
+
 @Serializable data class AiMealResult(
     val items: List<AiItem>,
     val meal: String? = null,
@@ -186,6 +207,10 @@ class AiClient {
     suspend fun product(jpegsBase64: List<String>): AiProductResult =
         call("/ai/product", json.encodeToString(ImagesBody.serializer(), ImagesBody(jpegsBase64.take(4))), AiProductResult.serializer())
 
+    /** A supermarket bill: up to 8 JPEGs (a long receipt cut into overlapping pieces, top to bottom). */
+    suspend fun bill(jpegsBase64: List<String>, keys: LibraryKeys): AiBillResult =
+        call("/ai/bill", json.encodeToString(ImagesBody.serializer(), ImagesBody(jpegsBase64.take(8), library = keys.items)), AiBillResult.serializer(), readTimeoutMs = 120_000)
+
     suspend fun label(jpegBase64: String): AiLabelResult =
         call("/ai/label", json.encodeToString(ImageBody.serializer(), ImageBody(jpegBase64)), AiLabelResult.serializer())
 
@@ -197,8 +222,8 @@ class AiClient {
 
     suspend fun setCap(usd: Double) = withContext(Dispatchers.IO) { AiTransports.current().post("/ai/cap", json.encodeToString(CapBody.serializer(), CapBody(usd))) }
 
-    private suspend fun <T> call(path: String, body: String, s: kotlinx.serialization.KSerializer<T>): T = withContext(Dispatchers.IO) {
-        val text = AiTransports.current().post(path, body, readTimeoutMs = 60_000)
+    private suspend fun <T> call(path: String, body: String, s: kotlinx.serialization.KSerializer<T>, readTimeoutMs: Int = 60_000): T = withContext(Dispatchers.IO) {
+        val text = AiTransports.current().post(path, body, readTimeoutMs = readTimeoutMs)
         json.decodeFromString(Envelope.serializer(s), text).data
     }
 

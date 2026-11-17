@@ -103,6 +103,30 @@ const PLATE_RESULT = {
 	},
 };
 
+const BILL_ITEM = {
+	type: 'object',
+	additionalProperties: false,
+	required: [...ITEM.required, 'packs', 'packaged', 'search'],
+	properties: {
+		...ITEM.properties,
+		packs: nullable(num),
+		packaged: { type: 'boolean' },
+		search: nullable({ type: 'string' }),
+	},
+};
+
+const BILL_RESULT = {
+	type: 'object',
+	additionalProperties: false,
+	required: ['items', 'skipped'],
+	properties: {
+		items: { type: 'array', items: BILL_ITEM },
+		skipped: { type: 'array', items: { type: 'string' } },
+	},
+};
+
+const BILL_TASK = 'Task: this is a supermarket receipt (one or more images; a long receipt is cut into overlapping pieces, top to bottom, so count each line once). List every food or drink bought, to add to their home stock. said: the receipt line as printed. name: the product in a short clear English name; expand abbreviations ("Riesenb. in Tomaten" is giant beans in tomato sauce, "Hähn.-Geschnetzeltes" is sliced chicken, "H-Milch 1,5%" is UHT milk 1.5% fat, "Eier Bodenhalt. 18er" is 18 barn eggs). match_key: their library item when it is the same food (their milk, eggs, skyr), else null. qty and unit: the total amount bought. A weighed line (0,172 kg x 4,29 EUR/kg) is that weight in g. "0,85 x 2" means 2 packs. A pack is the usual pack size of that product at that store in g or ml (a can of chickpeas 400 g, a carton of milk 1000 ml), or pc when counted (eggs, a cucumber, a bunch of coriander); when matched, use one of the library item units. packs: how many packs, cans, bottles or pieces were bought, else null. packaged: true for packaged products worth looking up by name in a product database, false for loose fruit, vegetables and herbs. search: the product as sold, in German, for a product database search (Kichererbsen, Skyr natur), else null. brand: only when the line names one or it is clearly the store brand of that product. estimate: for items not in their library, typical per-100 values, and grams = the total amount in g or ml. skipped: lines for things that are not food or drink (toiletries, cleaning, clothes, household), as printed. Never list deposits (Pfand), discounts (Preisvorteil), totals, tax or payment lines.';
+
 const LABEL_RESULT = {
 	type: 'object',
 	additionalProperties: false,
@@ -277,6 +301,21 @@ async function plate(apiKey, body) {
 	});
 }
 
+/** A supermarket receipt (screenshots or photos, a long one cut into pieces: body.images, up to 8) -> what was bought. */
+async function bill(apiKey, body) {
+	const list = Array.isArray(body.images) ? body.images : [];
+	if (!list.length) throw new HttpError(400, 'images are required');
+	if (list.length > 8) throw new HttpError(400, 'at most 8 images');
+	return ask(apiKey, {
+		task: BILL_TASK,
+		library: body.library,
+		content: [...list.map((d) => imageBlock(d, body.mediaType)), { type: 'text', text: 'The receipt:' }],
+		schema: BILL_RESULT,
+		model: MODEL,
+		maxTokens: 12000,
+	});
+}
+
 async function recipe(apiKey, body) {
 	if (!body.text || typeof body.text !== 'string') throw new HttpError(400, 'text is required');
 	return ask(apiKey, {
@@ -444,4 +483,4 @@ async function planWeek(apiKey, body) {
 	});
 }
 
-module.exports = { planWeek, parseMeal, readLabel, readProduct, plate, recipe, submitUnits, unitsResult, setWorkspace, HttpError, MODEL, costOf };
+module.exports = { bill, planWeek, parseMeal, readLabel, readProduct, plate, recipe, submitUnits, unitsResult, setWorkspace, HttpError, MODEL, costOf };

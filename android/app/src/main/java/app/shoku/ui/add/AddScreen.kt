@@ -109,6 +109,8 @@ fun AddScreen(
     val scan by vm.scan.collectAsState()
     val aiState by vm.ai.collectAsState()
     val place by vm.place.collectAsState()
+    /** An earlier meal to copy: its items open with ticks first. */
+    var copying by remember { mutableStateOf<RepeatOption?>(null) }
     val online by vm.online.collectAsState()
     var describing by remember { mutableStateOf(startDescribing) }
     var labelBarcode by remember { mutableStateOf<String?>(null) }
@@ -174,6 +176,20 @@ fun AddScreen(
             quick -> quickAdd(s)
             else -> sheetFor = s
         }
+    }
+    copying?.let { option ->
+        app.shoku.ui.components.PickItemsSheet(
+            title = "Copy ${vm.repeatLabel(option).replaceFirstChar { it.lowercase() }}",
+            subtitle = null,
+            items = option.entries.map { e -> app.shoku.ui.components.PickItem(e.id, e.name, app.shoku.ui.formatUnitQty(e.qty, e.unit), e.variant, e.kcal, e.protein) },
+            action = { n, of -> if (n == of) "Copy all $n" else "Copy $n of $of" },
+            onConfirm = { ids ->
+                copying = null
+                vm.copy(option, defaultStatus, if (ids.size == option.entries.size) null else ids)
+                announce("Copied ${ids.size} ${if (ids.size == 1) "item" else "items"}")
+            },
+            onDismiss = { copying = null },
+        )
     }
     didYouMean?.let { (picked, own, quick) ->
         androidx.compose.material3.AlertDialog(
@@ -260,10 +276,7 @@ fun AddScreen(
                 }
                 state.repeat?.let { option ->
                     item(key = "repeat") {
-                        OutlinedCard(Modifier.fillMaxWidth(), onClick = {
-                            vm.copy(option, defaultStatus)
-                            announce("Copied ${option.entries.size} items")
-                        }) {
+                        OutlinedCard(Modifier.fillMaxWidth(), onClick = { copying = option }) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Box(Modifier.size(44.dp).clip(ShokuShapes.Tile).background(ShokuColors.Tint), contentAlignment = Alignment.Center) {
                                     Icon(Icons.Outlined.ContentCopy, null, tint = ShokuColors.Ink, modifier = Modifier.size(22.dp))
@@ -297,7 +310,7 @@ fun AddScreen(
                             state.olderRepeats.forEachIndexed { k, option ->
                                 if (k > 0) Hairline()
                                 Row(
-                                    Modifier.fillMaxWidth().clickable { vm.copy(option, defaultStatus); announce("Copied ${option.entries.size} items") }.padding(vertical = 11.dp),
+                                    Modifier.fillMaxWidth().clickable { copying = option }.padding(vertical = 11.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     Column(Modifier.weight(1f)) {
@@ -430,11 +443,12 @@ private fun ScanEditor(vm: AddViewModel, scan: ScanState, onReadLabel: (String?)
     val st = scan as? ScanState.NewFood ?: return
     app.shoku.ui.library.NewFoodEditor(
         st.draft,
-        onReadLabel = { b -> vm.clearScan(); onReadLabel(b) },
+        onReadLabel = { b -> vm.keepForPhoto(st.draft); vm.clearScan(); onReadLabel(b) },
         onSave = { food, portions -> vm.saveScanned(food, portions) },
         onDismiss = { vm.clearScan() },
-        onPackPhoto = { b -> vm.clearScan(); onPackPhoto(b) },
+        onPackPhoto = { b -> vm.keepForPhoto(st.draft); vm.clearScan(); onPackPhoto(b) },
         onUseExisting = { f -> vm.useExisting(f, st.draft) },
+        onDraft = { vm.showDraft(it) },
     )
 }
 

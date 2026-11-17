@@ -128,6 +128,7 @@ fun TodayScreen(
 
     val context = androidx.compose.ui.platform.LocalContext.current
     var photoAt by remember { mutableStateOf<String?>(null) }
+    var ticking by remember { mutableStateOf<TodayPick?>(null) }
     // "Add a photo of this meal" (no estimate): the photo sheet, then saved with the meal's entries.
     var photoFor by remember { mutableStateOf<String?>(null) }
     photoFor?.let { mealName ->
@@ -145,6 +146,35 @@ fun TodayScreen(
         )
     }
     photoAt?.let { f -> app.shoku.ui.components.MealPhotoViewer(f, onDismiss = { photoAt = null }) }
+
+    // Adding the plan or removing planned items: tick which ones first.
+    ticking?.let { pick ->
+        app.shoku.ui.components.PickItemsSheet(
+            title = if (pick.adding) "Add from the plan" else "Remove planned",
+            subtitle = null,
+            items = pick.entries.map { e -> app.shoku.ui.components.PickItem(e.id, e.name, "${e.meal} · ${formatUnitQty(e.qty, e.unit)}", e.variant, e.kcal, e.protein) },
+            action = { n, of -> (if (pick.adding) "Add" else "Remove") + (if (n == of) " all $n" else " $n of $of") },
+            onConfirm = { ids ->
+                ticking = null
+                val chosen = pick.entries.filter { it.id in ids }
+                if (pick.adding) vm.addEntries(chosen) { added ->
+                    scope.launch {
+                        val r = snackbar.showSnackbar("Added ${added.size} planned ${if (added.size == 1) "item" else "items"}", actionLabel = "Undo", duration = SnackbarDuration.Short)
+                        if (r == SnackbarResult.ActionPerformed) vm.undoAll(added)
+                    }
+                } else {
+                    vm.undoAll(chosen)
+                    scope.launch {
+                        snackbar.currentSnackbarData?.dismiss()
+                        val r = snackbar.showSnackbar("Removed ${chosen.size} planned ${if (chosen.size == 1) "item" else "items"}", actionLabel = "Undo", duration = SnackbarDuration.Long)
+                        if (r == SnackbarResult.ActionPerformed) vm.restoreAll(chosen)
+                    }
+                }
+            },
+            onDismiss = { ticking = null },
+            hint = if (pick.adding) "Untick anything you don't want." else "Untick anything you want to keep.",
+        )
+    }
 
     fun deleteWithUndo(entry: LogEntry) {
         vm.delete(entry)
@@ -214,6 +244,8 @@ fun TodayScreen(
                 fun removePlanned(meal: String?) {
                     val gone = state.meals.filter { meal == null || it.meal == meal }.flatMap { it.entries }.filter { it.status != EntryStatus.EATEN }
                     if (gone.isEmpty()) return
+                    // Several: choose which (ticks); one: straight away, with Undo.
+                    if (gone.size > 1) { ticking = TodayPick(gone, adding = false); return }
                     vm.undoAll(gone)
                     scope.launch {
                         snackbar.currentSnackbarData?.dismiss()
@@ -240,12 +272,7 @@ fun TodayScreen(
                     item(key = "plan") {
                         PlanCard(p, state.planChoices, title = state.date.relativeTitle().let { t -> if (t.first().isDigit() || t.contains(' ')) "Plan for $t" else "$t's plan" }, onChoose = vm::choose, onCook = onCook, onAdd = add@{
                             p ?: return@add
-                            vm.addPlan(p) { added ->
-                                scope.launch {
-                                    val r = snackbar.showSnackbar("Added ${added.size} planned items", actionLabel = "Undo", duration = SnackbarDuration.Short)
-                                    if (r == SnackbarResult.ActionPerformed) vm.undoAll(added)
-                                }
-                            }
+                            ticking = TodayPick(p.entries, adding = true)
                         })
                     }
                 }
@@ -835,3 +862,6 @@ private fun PlanCard(
         } }
     }
 }
+
+/** Items to tick before adding the plan ([adding]) or removing planned ones. */
+private data class TodayPick(val entries: List<LogEntry>, val adding: Boolean)

@@ -23,7 +23,95 @@ data class FoodDraft(
     val packQty: Double? = null,
     /** Household units to start with, e.g. "slice" = the pack's serving size. */
     val portions: List<FoodPortion> = emptyList(),
+    /** Barcode and a later label/pack photo disagree here: what each said, and which one is used. */
+    val choices: List<FieldChoice> = emptyList(),
+    /** What the barcode and the photo each gave, so a choice can be switched. */
+    val merged: Pair<Food, Food>? = null,
+    /** "label" or "pack": what the second source was. */
+    val photoKind: String? = null,
 )
+
+/** One field the barcode and the photo disagree on. [fromPhoto]: the photo's value is the one used. */
+data class FieldChoice(val field: String, val label: String, val barcode: String, val photo: String, val fromPhoto: Boolean)
+
+/**
+ * A barcode's draft (Open Food Facts) and a label or pack photo read afterwards, combined: the barcode
+ * stays first for name and brand, the photo fills in whatever the barcode lacked (calories, protein…).
+ * Where both have a value and they differ, both are kept as a [FieldChoice]: name and brand from the
+ * barcode, the numbers from the photo (read off the actual pack), each switchable in the editor.
+ */
+object DraftMerge {
+    private val LABELS = linkedMapOf("name" to "Name", "brand" to "Brand", "unit" to "Per 100", "kcal" to "Calories", "protein" to "Protein", "fibre" to "Fibre", "carbs" to "Carbs", "fat" to "Fat")
+
+    /** Only a draft with something from the barcode is worth keeping when a photo comes in. */
+    fun worthKeeping(d: FoodDraft) = d.prefill.barcode != null || d.found
+
+    fun merge(barcode: FoodDraft, photo: FoodDraft): FoodDraft {
+        val a = barcode.prefill
+        val b = photo.prefill
+        val choices = LABELS.keys.mapNotNull { f ->
+            val x = text(a, f) ?: return@mapNotNull null
+            val y = text(b, f) ?: return@mapNotNull null
+            if (same(f, a, b)) null else FieldChoice(f, LABELS.getValue(f), x, y, fromPhoto = f !in setOf("name", "brand"))
+        }
+        val draft = barcode.copy(
+            prefill = a,
+            families = (barcode.families + photo.families).distinctBy { it.id },
+            found = true,
+            fromLabel = photo.fromLabel,
+            note = if (choices.isEmpty()) "Name from the barcode, the missing values from the ${if (photo.fromPack) "pack photo" else "label"}." else null,
+            portions = (barcode.portions + photo.portions).distinctBy { it.label },
+            packQty = barcode.packQty ?: photo.packQty,
+            choices = choices,
+            merged = a to b,
+            photoKind = if (photo.fromPack && !photo.fromLabel) "pack" else "label",
+        )
+        return apply(draft)
+    }
+
+    /** Switches one field between the barcode's and the photo's value. */
+    fun choose(d: FoodDraft, field: String, fromPhoto: Boolean): FoodDraft =
+        apply(d.copy(choices = d.choices.map { if (it.field == field) it.copy(fromPhoto = fromPhoto) else it }))
+
+    /** The food as chosen: the barcode's values, gaps filled from the photo, then each choice. */
+    private fun apply(d: FoodDraft): FoodDraft {
+        val (a, b) = d.merged ?: return d
+        val pick = d.choices.associate { it.field to it.fromPhoto }
+        fun <T> v(f: String, x: T?, y: T?): T? = when (pick[f]) { true -> y ?: x; false -> x ?: y; null -> x ?: y }
+        val photoUnit = pick["unit"] == true
+        return d.copy(prefill = a.copy(
+            name = v("name", a.name.takeIf { it.isNotBlank() }, b.name.takeIf { it.isNotBlank() }) ?: a.name,
+            brand = v("brand", a.brand?.takeIf { it.isNotBlank() }, b.brand?.takeIf { it.isNotBlank() }),
+            unit = if (photoUnit) b.unit else a.unit,
+            baseQty = if (photoUnit) b.baseQty else a.baseQty,
+            kcal = v("kcal", a.kcal, b.kcal), protein = v("protein", a.protein, b.protein), fibre = v("fibre", a.fibre, b.fibre),
+            carbs = v("carbs", a.carbs, b.carbs), fat = v("fat", a.fat, b.fat),
+            barcode = a.barcode ?: b.barcode,
+        ))
+    }
+
+    private fun num(f: Food, field: String): Double? = when (field) {
+        "kcal" -> f.kcal; "protein" -> f.protein; "fibre" -> f.fibre; "carbs" -> f.carbs; "fat" -> f.fat; else -> null
+    }
+
+    private fun text(f: Food, field: String): String? = when (field) {
+        "name" -> f.name.takeIf { it.isNotBlank() }
+        "brand" -> f.brand?.takeIf { it.isNotBlank() }
+        "unit" -> "${app.shoku.ui.formatQty(f.baseQty)} ${f.unit}"
+        else -> num(f, field)?.let { app.shoku.ui.formatQty(it) + if (field == "kcal") " kcal" else " g" }
+    }
+
+    private fun same(field: String, a: Food, b: Food): Boolean = when (field) {
+        "name" -> app.shoku.domain.searchKey(a.name) == app.shoku.domain.searchKey(b.name)
+        "brand" -> app.shoku.domain.searchKey(a.brand.orEmpty()) == app.shoku.domain.searchKey(b.brand.orEmpty())
+        "unit" -> a.unit == b.unit && a.baseQty == b.baseQty
+        else -> {
+            val x = num(a, field)!!
+            val y = num(b, field)!!
+            Math.abs(x - y) <= maxOf(0.5, 0.02 * maxOf(Math.abs(x), Math.abs(y)))
+        }
+    }
+}
 
 sealed interface BarcodeResult {
     /** Already in the library. */

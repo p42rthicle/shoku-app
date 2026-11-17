@@ -195,7 +195,7 @@ module.exports = async (req, res) => {
 		const app = catalyst.initialize(req, { scope: 'admin' });
 
 		if (req.method === 'GET' && path === '/health') return send(res, 200, { ok: true, time: Date.now(), ai: Boolean(secrets.anthropicKey) });
-		const aiRoutes = { '/ai/meal': ai.parseMeal, '/ai/label': ai.readLabel, '/ai/product': ai.readProduct, '/ai/plate': ai.plate, '/ai/recipe': ai.recipe, '/ai/plan': ai.planWeek };
+		const aiRoutes = { '/ai/meal': ai.parseMeal, '/ai/label': ai.readLabel, '/ai/product': ai.readProduct, '/ai/plate': ai.plate, '/ai/recipe': ai.recipe, '/ai/plan': ai.planWeek, '/ai/bill': ai.bill };
 		if (req.method === 'POST' && aiRoutes[path]) {
 			const body = await readBody(req);
 			await checkCap(app);

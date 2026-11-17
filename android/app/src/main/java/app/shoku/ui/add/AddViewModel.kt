@@ -403,8 +403,8 @@ class AddViewModel(
         added.value = added.value + listOf(listOf(entry))
     }
 
-    fun copy(option: RepeatOption, status: String) = viewModelScope.launch {
-        val copies = repo.copyMeal(option.date, option.meal, date, meal.value, status)
+    fun copy(option: RepeatOption, status: String, only: Set<String>? = null) = viewModelScope.launch {
+        val copies = repo.copyMeal(option.date, option.meal, date, meal.value, status, only)
         if (copies.isNotEmpty()) added.value = added.value + listOf(copies)
     }
 
@@ -541,6 +541,15 @@ class AddViewModel(
         }.onSuccess { ai.value = it }.onFailure { ai.value = aiFailure(it) }
     }
 
+    /** What the barcode found, kept while a label or pack photo is read, then merged with it (barcode first). */
+    private var photoBase: app.shoku.data.FoodDraft? = null
+    fun keepForPhoto(d: app.shoku.data.FoodDraft) {
+        photoBase = d.takeIf { app.shoku.data.DraftMerge.worthKeeping(it) }?.let { it.merged?.let { (a, _) -> it.copy(prefill = a, merged = null, choices = emptyList()) } ?: it }
+    }
+    private fun combine(d: app.shoku.data.FoodDraft) = (photoBase?.let { app.shoku.data.DraftMerge.merge(it, d) } ?: d).also { photoBase = null }
+    /** Barcode or photo picked for a field they disagree on. */
+    fun showDraft(d: app.shoku.data.FoodDraft) { scan.value = ScanState.NewFood(d) }
+
     /** A photo of a nutrition label -> a new food to confirm (keeps a scanned barcode if there was one). */
     fun aiLabel(jpegBase64: String, barcode: String? = null) = aiLaunch {
         ai.value = AiState.Working("Reading the label…")
@@ -552,7 +561,7 @@ class AddViewModel(
                     return@onSuccess
                 }
                 ai.value = AiState.Idle
-                scan.value = ScanState.NewFood(draft)
+                scan.value = ScanState.NewFood(combine(draft))
             }
             .onFailure { ai.value = aiFailure(it) }
     }
@@ -564,7 +573,7 @@ class AddViewModel(
             .onSuccess { draft ->
                 if (draft == null) { ai.value = AiState.Failed("Couldn't tell what that is. Try the front of the pack, with the name in focus."); return@onSuccess }
                 ai.value = AiState.Idle
-                scan.value = ScanState.NewFood(draft)
+                scan.value = ScanState.NewFood(combine(draft))
             }
             .onFailure { ai.value = aiFailure(it) }
     }

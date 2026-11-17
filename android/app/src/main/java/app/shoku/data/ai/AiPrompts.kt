@@ -94,6 +94,21 @@ val PLATE_RESULT = obj(
 
 const val REFS_INTRO = "Photos of earlier meals at their home, to recognise their own plates, bowls and cutlery (not this meal):"
 
+private val BILL_ITEM = buildJsonObject {
+    ITEM.forEach { (k, v) ->
+        when (k) {
+            "required" -> putJsonArray("required") { (v as JsonArray).forEach { add(it) }; add("packs"); add("packaged"); add("search") }
+            "properties" -> putJsonObject("properties") {
+                (v as JsonObject).forEach { (pk, pv) -> put(pk, pv) }
+                put("packs", nullable(num)); put("packaged", typed("boolean")); put("search", nullable(typed("string")))
+            }
+            else -> put(k, v)
+        }
+    }
+}
+
+val BILL_RESULT = obj("items" to arr(BILL_ITEM), "skipped" to arr(typed("string")))
+
 val LABEL_RESULT = obj(
     "readable" to typed("boolean", "False if no nutrition table can be read"),
     "name" to nullable(typed("string")),
@@ -169,6 +184,8 @@ const val LABEL_TASK = "Task: read the nutrition table on this food package. Use
 const val PRODUCT_TASK = "Task: identify the packaged product in the photos (one to four photos of the same pack). They may show the front, back or side of the pack, often with no nutrition table (a supplement tub, a spice packet). Take the name and brand from the front of the pack when a photo shows it, and the values from the nutrition table when one shows. Name: the product as sold, short, without the brand (e.g. Creatine monohydrate). Brand: as printed on the pack. If a nutrition table is visible in any photo, read the per 100 g / 100 ml column and set from_label true. Otherwise give typical per-100 values for this kind of product from what you know and set from_label false (pure creatine, caffeine or electrolyte powders are about 0 kcal). serving_size: grams or ml in one serving or scoop if the pack says, else null. note: one short line saying what you read from the pack and what is typical. If you cannot tell what the product is, set identified false."
 
 const val HINTS_INTRO = "This person's past corrections and usual portions. When the food or photo matches, follow them over your own guess:"
+const val BILL_TASK = "Task: this is a supermarket receipt (one or more images; a long receipt is cut into overlapping pieces, top to bottom, so count each line once). List every food or drink bought, to add to their home stock. said: the receipt line as printed. name: the product in a short clear English name; expand abbreviations (\"Riesenb. in Tomaten\" is giant beans in tomato sauce, \"Hähn.-Geschnetzeltes\" is sliced chicken, \"H-Milch 1,5%\" is UHT milk 1.5% fat, \"Eier Bodenhalt. 18er\" is 18 barn eggs). match_key: their library item when it is the same food (their milk, eggs, skyr), else null. qty and unit: the total amount bought. A weighed line (0,172 kg x 4,29 EUR/kg) is that weight in g. \"0,85 x 2\" means 2 packs. A pack is the usual pack size of that product at that store in g or ml (a can of chickpeas 400 g, a carton of milk 1000 ml), or pc when counted (eggs, a cucumber, a bunch of coriander); when matched, use one of the library item units. packs: how many packs, cans, bottles or pieces were bought, else null. packaged: true for packaged products worth looking up by name in a product database, false for loose fruit, vegetables and herbs. search: the product as sold, in German, for a product database search (Kichererbsen, Skyr natur), else null. brand: only when the line names one or it is clearly the store brand of that product. estimate: for items not in their library, typical per-100 values, and grams = the total amount in g or ml. skipped: lines for things that are not food or drink (toiletries, cleaning, clothes, household), as printed. Never list deposits (Pfand), discounts (Preisvorteil), totals, tax or payment lines."
+
 const val PLATE_TASK = "Task: estimate what is on this plate or in this bowl. List each visible food with a realistic amount; use the plate, cutlery, glasses and bowls for scale. Match to their library when it is clearly the same dish (e.g. their own dal or rice batch). Confidence is at most medium for anything judged by eye."
 
 const val RECIPE_TASK = "Task: they describe what went into a pot for one cook (a batch). Return every ingredient with its amount for the whole pot, matched to their library where possible. Spices under 5 g can be skipped unless named with an amount. If they say how many servings or the dish name, fill those."
@@ -192,13 +209,14 @@ Use what they eat often (their history) and what is at home, especially things t
 /** Turns the app's request bodies into Claude requests exactly as ai.js does. Errors carry ai.js's messages. */
 object DirectRoutes {
     const val UNITS_CHUNK = 40
-    val ASK_ROUTES = setOf("/ai/meal", "/ai/label", "/ai/product", "/ai/plate", "/ai/recipe", "/ai/plan")
+    val ASK_ROUTES = setOf("/ai/meal", "/ai/label", "/ai/product", "/ai/plate", "/ai/recipe", "/ai/plan", "/ai/bill")
 
     fun build(path: String, body: JsonObject): AskRequest = when (path) {
         "/ai/meal" -> parseMeal(body)
         "/ai/label" -> readLabel(body)
         "/ai/product" -> readProduct(body)
         "/ai/plate" -> plate(body)
+        "/ai/bill" -> bill(body)
         "/ai/recipe" -> recipe(body)
         "/ai/plan" -> planWeek(body)
         else -> throw BackendException(404, "no route for POST $path")
@@ -265,6 +283,14 @@ object DirectRoutes {
             " There are ${photos.size} photos of the same meal from different angles: use them together to judge depth and portion size, and count each food once."
         } else ""
         return ask(PLATE_TASK + angles + extra, body["library"], refs(body) + photos + hints(body) + UserBlock.Text("What is here and how much?"), PLATE_RESULT, model = PHOTO_MODEL)
+    }
+
+    /** A supermarket receipt, up to 8 images (a long one cut into pieces), as ai.js's bill. */
+    private fun bill(body: JsonObject): AskRequest {
+        val list = (body["images"] as? JsonArray).orEmpty()
+        if (list.isEmpty()) throw BackendException(400, "images are required")
+        if (list.size > 8) throw BackendException(400, "at most 8 images")
+        return ask(BILL_TASK, body["library"], list.map { imageBlock(it, body.str("mediaType")) } + UserBlock.Text("The receipt:"), BILL_RESULT, maxTokens = 12000, model = PHOTO_MODEL)
     }
 
     /** Earlier photos of their home dishes (up to 3), as ai.js's refsBlocks. */

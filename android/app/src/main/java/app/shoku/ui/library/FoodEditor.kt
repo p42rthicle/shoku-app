@@ -1,5 +1,11 @@
 package app.shoku.ui.library
 
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.background
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.layout.fillMaxHeight
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -94,6 +100,9 @@ fun FoodEditor(
     var fat by remember { mutableStateOf(seed?.fat.asField()) }
     var aliases by remember { mutableStateOf(seed?.aliases ?: "") }
     var parentId by remember { mutableStateOf(seed?.parentId) }
+    // Groups found with the search icon (or just made) join the suggested ones.
+    var foundGroups by remember { mutableStateOf(listOf<Food>()) }
+    var pickingGroup by remember { mutableStateOf(false) }
     var updatePast by remember { mutableStateOf(true) }
     // Editable copy of the portions: label to amount text. Removed ones are soft-deleted on save.
     var units by remember { mutableStateOf(portions.filter { !it.deleted }.sortedBy { it.qty }.map { Triple<String?, String, String>(it.id, it.label, it.qty.asField()) }) }
@@ -172,10 +181,10 @@ fun FoodEditor(
             }
             LabeledField("Also known as (optional)", aliases, { aliases = it }, Modifier.fillMaxWidth(), placeholder = "e.g. Vollmilch, Milch")
 
-            if (!isGeneric && familyChoices.isNotEmpty()) {
+            if (!isGeneric) {
                 Text("Belongs to", style = MaterialTheme.typography.titleSmall, color = ShokuColors.Muted)
-                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    familyChoices.forEach { g ->
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    (foundGroups + familyChoices).distinctBy { it.id }.forEach { g ->
                         Box(Modifier.clip(CircleShape).clickable { parentId = if (parentId == g.id) null else g.id }) {
                             StatusChip(g.name, if (parentId == g.id) ChipStyle.Filled else ChipStyle.Tinted)
                         }
@@ -183,7 +192,26 @@ fun FoodEditor(
                     Box(Modifier.clip(CircleShape).clickable { parentId = null }) {
                         StatusChip("None", if (parentId == null) ChipStyle.Filled else ChipStyle.Tinted)
                     }
+                    // Not among the suggestions: search every group, or make one.
+                    Box(
+                        Modifier.size(34.dp).clip(CircleShape).background(ShokuColors.Tint).clickable { pickingGroup = true },
+                        contentAlignment = Alignment.Center,
+                    ) { androidx.compose.material3.Icon(Icons.Rounded.Search, "Find a group", tint = ShokuColors.Muted, modifier = Modifier.size(18.dp)) }
                 }
+                if (pickingGroup) GroupPicker(
+                    exclude = seed?.id,
+                    onPick = { g -> foundGroups = listOf(g) + foundGroups.filter { it.id != g.id }; parentId = g.id; pickingGroup = false },
+                    newGroup = { groupName ->
+                        // A new "any brand" group, starting from this food's values.
+                        Food(
+                            id = app.shoku.data.ShokuRepository.newId(), name = groupName, unit = unit.ifBlank { "g" },
+                            baseQty = base.toAmount() ?: 100.0, kcal = kcal.toAmount(), protein = protein.toAmount(),
+                            fibre = fibre.toAmount(), carbs = carbs.toAmount(), fat = fat.toAmount(),
+                            kind = FoodKind.GENERIC, source = "manual",
+                        )
+                    },
+                    onDismiss = { pickingGroup = false },
+                )
             }
 
             if (onSavePortions != null) {
@@ -292,6 +320,59 @@ fun FoodEditor(
                     modifier = Modifier.fillMaxWidth().clip(ShokuShapes.Button).clickable { if (confirm) onDelete() else confirm = true }.padding(vertical = 12.dp),
                     textAlign = TextAlign.Center,
                 )
+            }
+        }
+    }
+}
+
+/**
+ * Every group ("any brand" food) to put a food under, searchable; or a new one named as typed, made from
+ * [newGroup] and saved straight away.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun GroupPicker(exclude: String?, onPick: (Food) -> Unit, newGroup: (String) -> Food, onDismiss: () -> Unit) {
+    val shoku = androidx.compose.ui.platform.LocalContext.current.applicationContext as app.shoku.ShokuApplication
+    val library by shoku.repository.library.collectAsState(initial = null)
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var query by remember { mutableStateOf("") }
+    val groups = remember(library) { library?.foods?.values?.filter { it.kind == FoodKind.GENERIC && !it.deleted && it.id != exclude }?.sortedBy { it.name.lowercase() }.orEmpty() }
+    val q = app.shoku.domain.searchKey(query.trim())
+    val shown = if (q.isEmpty()) groups else groups.map { it to app.shoku.domain.matchScore(q, app.shoku.domain.searchKey(it.name), app.shoku.domain.searchKey(it.aliases)) }
+        .filter { it.second > 0 }.sortedByDescending { it.second }.map { it.first }
+    androidx.compose.material3.ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = ShokuColors.Paper,
+        shape = ShokuShapes.Sheet,
+    ) {
+        Column(Modifier.fillMaxHeight(0.85f).padding(horizontal = 20.dp).navigationBarsPadding().imePadding()) {
+            Text("Belongs to", style = MaterialTheme.typography.headlineSmall)
+            Text("The general food it's a kind of (Spices, Milk, Rice). Pick one, or type a new one.", style = MaterialTheme.typography.bodyMedium, color = ShokuColors.Muted)
+            Spacer(Modifier.height(10.dp))
+            LabeledField("Search groups", query, { query = it }, Modifier.fillMaxWidth(), placeholder = "e.g. spices")
+            Spacer(Modifier.height(6.dp))
+            androidx.compose.foundation.lazy.LazyColumn(Modifier.fillMaxWidth()) {
+                val typed = query.trim()
+                if (typed.isNotEmpty() && groups.none { app.shoku.domain.searchKey(it.name) == q }) item(key = "new") {
+                    Text(
+                        "+ New group \u201c${typed.replaceFirstChar { it.uppercase() }}\u201d",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.fillMaxWidth().clip(ShokuShapes.Button).clickable {
+                            val g = newGroup(typed.replaceFirstChar { it.uppercase() })
+                            scope.launch { shoku.repository.saveFood(g, updatePast = false); onPick(g) }
+                        }.padding(vertical = 12.dp),
+                    )
+                }
+                items(shown.size, key = { shown[it].id }) { i ->
+                    val g = shown[i]
+                    Column(Modifier.fillMaxWidth().clip(ShokuShapes.Button).clickable { onPick(g) }.padding(vertical = 10.dp)) {
+                        Text(g.name, style = MaterialTheme.typography.titleMedium)
+                        Text("Any brand · per ${app.shoku.ui.formatUnitQty(g.baseQty, g.unit)}${g.kcal?.let { " · ${Math.round(it)} kcal" } ?: ""}",
+                            style = MaterialTheme.typography.bodySmall, color = ShokuColors.Muted)
+                    }
+                }
+                if (shown.isEmpty() && typed.isEmpty()) item { Text("No groups yet.", color = ShokuColors.Muted) }
             }
         }
     }

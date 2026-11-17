@@ -140,6 +140,15 @@ class HomeRepository(private val db: ShokuDatabase, scope: CoroutineScope) {
 
     suspend fun saveStockItem(item: StockItem) = home.upsertStock(listOf(item.copy(updatedAt = System.currentTimeMillis())))
 
+    /** The stock row for a food, if it has one. */
+    suspend fun stockFor(foodId: String): StockItem? = withContext(Dispatchers.IO) { home.allStock().firstOrNull { it.foodId == foodId && !it.deleted } }
+
+    /** Takes [qty] (in the food's unit) back off a food's stock, e.g. a bill line that shouldn't have been added. */
+    suspend fun takeOut(foodId: String, qty: Double, note: String) = withContext(Dispatchers.IO) {
+        val item = home.allStock().firstOrNull { it.foodId == foodId && !it.deleted && it.tracked } ?: return@withContext
+        home.upsertMoves(listOf(StockMove(java.util.UUID.randomUUID().toString(), item.id, -qty, System.currentTimeMillis(), note)))
+    }
+
     /** "There's N now": a fresh count (purchases and use before now no longer matter). */
     suspend fun recount(item: StockItem, qty: Double) = System.currentTimeMillis().let { now ->
         home.upsertStock(listOf(item.copy(countQty = qty, countedAt = now, status = "have", updatedAt = now)))

@@ -66,9 +66,10 @@ class ShokuRepository(private val db: ShokuDatabase, scope: CoroutineScope) {
     suspend fun restore(entry: LogEntry) = update(entry.copy(deleted = false))
 
     /** Copies one meal's entries from [from] to [to]; returns the new entries so they can be undone. */
-    suspend fun copyMeal(from: LocalDate, meal: String, to: LocalDate, toMeal: String, status: String): List<LogEntry> {
+    /** Copies an earlier meal's entries (only those in [only], when given) to another day and meal. */
+    suspend fun copyMeal(from: LocalDate, meal: String, to: LocalDate, toMeal: String, status: String, only: Set<String>? = null): List<LogEntry> {
         val now = System.currentTimeMillis()
-        val copies = logs.meal(from.toString(), meal).mapIndexed { i, e ->
+        val copies = logs.meal(from.toString(), meal).filter { only == null || it.id in only }.mapIndexed { i, e ->
             e.copy(
                 id = newId(), date = to.toString(), meal = toMeal, status = status, source = "copy",
                 createdAt = now + i, updatedAt = now + i,
