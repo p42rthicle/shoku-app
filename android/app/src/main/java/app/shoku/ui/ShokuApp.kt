@@ -154,7 +154,10 @@ fun ShokuApp() {
                 planVm.section = when (r.arg) { "supplements" -> 1; "stock" -> 2; else -> 0 }
                 planVm.menuOpen = r.arg == "menu"
             }
-            "stock" -> { addTarget = null; libraryVm.openStock(); tab = Tab.Library }
+            "stock" -> {
+                addTarget = null; libraryVm.openStock(); tab = Tab.Library
+                if (r.arg == "bill") app.shoku.data.BillImport.openReview.value = true
+            }
             "search" -> { addTarget = null; openSearch() }
             "library" -> { addTarget = null; tab = Tab.Library; libraryVm.backToList(); r.arg?.let { libraryVm.query = it } }
             "insights" -> { addTarget = null; tab = Tab.Insights }

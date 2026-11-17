@@ -11,6 +11,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import app.shoku.ShokuApplication
+import app.shoku.domain.inFoodUnit
+import kotlinx.coroutines.launch
 import app.shoku.data.db.StockItem
 
 /** Which stock sheet is open (search to add, say it, edit one item). */
@@ -71,7 +73,12 @@ fun StockSheets(vm: PlanViewModel, ui: StockUi, onStockAdded: ((String) -> Unit)
     val lib = library
     if (ui.searching && lib != null) {
         val reference = (context.applicationContext as ShokuApplication).reference
-        app.shoku.ui.today.FoodSearchSheet("Add to stock", null, lib, reference, onPick = { ui.searching = false; vm.pickForStock(it) }, onDismiss = { ui.searching = false }, foodsOnly = true)
+        val replacing = vm.replacingBill
+        app.shoku.ui.today.FoodSearchSheet(
+            if (replacing != null) "Replace ${replacing.name}" else "Add to stock",
+            replacing?.let { "On the bill: ${it.said}" }, lib, reference,
+            onPick = { ui.searching = false; vm.pickForStock(it) }, onDismiss = { ui.searching = false; vm.replacingBill = null }, foodsOnly = true,
+        )
     }
     if (ui.saying) {
         app.shoku.ui.add.DescribeSheet(
@@ -119,11 +126,16 @@ fun StockSheets(vm: PlanViewModel, ui: StockUi, onStockAdded: ((String) -> Unit)
                 confirmLabel = "Add to stock", showStatus = false,
                 onConfirm = { r ->
                     vm.addStock(food, r.unit, r.qty, place)
+                    vm.replacingBill?.let { line ->
+                        vm.replacingBill = null
+                        val shoku = context.applicationContext as ShokuApplication
+                        shoku.appScope.launch { app.shoku.data.BillImport.replaced(shoku, line, food, lib.inFoodUnit(food.id, r.unit, r.qty) ?: r.qty) }
+                    }
                     val msg = "Added ${app.shoku.ui.formatUnitQty(r.qty, r.unit)} ${food.name} to stock"
                     if (onStockAdded != null) onStockAdded(msg)
                     else android.widget.Toast.makeText(context.applicationContext, msg, android.widget.Toast.LENGTH_SHORT).show()
                 },
-                onDismiss = { vm.amountFor.value = null },
+                onDismiss = { vm.amountFor.value = null; vm.replacingBill = null },
             )
         }
     }

@@ -25,6 +25,16 @@ data class Release(val version: String, val date: String, val changes: List<Stri
  */
 val CHANGELOG = listOf(
     Release(
+        "0.9.55", "17 Nov 2026",
+        listOf(
+            "Bills to stock: share a receipt from the Lidl app to Shoku (\"Add bill to stock\"), or Stock › Bill for screenshots or a photo of a paper bill",
+            "What's clearly your food goes onto its stock straight away; new things are looked up (Open Food Facts for packs, the food database for fruit and vegetables, an estimate last), added too, and wait for you to check",
+            "A notification when the bill is in, and a card on Stock: keep, edit, replace (search, scan or a photo) or remove each new item; untick several to remove them at once",
+            "Toiletries, clothes and other non-food lines are listed as not added, with Add anyway",
+            "Say it's new items show up for checking the same way",
+        ),
+    ),
+    Release(
         "0.9.49", "17 Nov 2026",
         listOf(
             "Scanned a pack, then read its label (or a photo of the pack)? The two are merged instead of the label replacing everything: name and brand stay from the barcode, the label fills in what was missing, and where they disagree you pick: \"Barcode or label?\" with both values side by side",

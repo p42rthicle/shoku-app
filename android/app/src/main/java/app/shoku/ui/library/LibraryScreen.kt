@@ -132,6 +132,7 @@ fun LibraryScreen(vm: LibraryViewModel, snackbar: SnackbarHostState, contentPadd
     }
 }
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 private fun LibraryList(
     vm: LibraryViewModel,
@@ -167,6 +168,24 @@ private fun LibraryList(
     val stock by planVm.stockView.collectAsState()
     val stockBusy by planVm.busy.collectAsState()
     val stockScan = app.shoku.ui.plan.rememberStockScan(planVm)
+    // A bill: screenshots (a long Lidl receipt is fine) or a photo of a paper one.
+    val shoku = androidx.compose.ui.platform.LocalContext.current.applicationContext as app.shoku.ShokuApplication
+    val billState by app.shoku.data.BillImport.state.collectAsState()
+    val bills by app.shoku.data.BillImport.bills.collectAsState()
+    val openBillReview by app.shoku.data.BillImport.openReview.collectAsState()
+    var choosingBill by remember { mutableStateOf(false) }
+    var reviewingBill by remember { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(openBillReview) { if (openBillReview) { reviewingBill = true; app.shoku.data.BillImport.openReview.value = false } }
+    val billGallery = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.PickMultipleVisualMedia(8),
+    ) { uris -> app.shoku.data.BillImport.start(shoku, uris) }
+    val billPhotoUri = remember {
+        val dir = java.io.File(shoku.cacheDir, "images").apply { mkdirs() }
+        androidx.core.content.FileProvider.getUriForFile(shoku, "${shoku.packageName}.files", java.io.File(dir, "bill.jpg"))
+    }
+    val billCamera = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.TakePicture()) { ok ->
+        if (ok) app.shoku.data.BillImport.start(shoku, listOf(billPhotoUri))
+    }
     androidx.compose.runtime.LaunchedEffect(stockUi.editFood, library) {
         val item = stockUi.editFood ?: return@LaunchedEffect
         library.foods[item.foodId]?.let { editingFood = it; foodFromStock = item }
@@ -296,6 +315,17 @@ private fun LibraryList(
                 stockSection(
                     stock, stockBusy,
                     onScan = stockScan, onSearch = { stockUi.searching = true }, onSay = { stockUi.saying = true },
+                    onBill = { choosingBill = true },
+                    billCard = run {
+                        val toCheck = bills.sumOf { it.toReview.size }
+                        val st = billState
+                        when {
+                            st is app.shoku.data.BillImport.State.Working -> { { BillCard(if (st.step.startsWith("Reading")) "Reading your bill…" else st.step, "You can leave this screen; a notification says when it's done.", null) } }
+                            st is app.shoku.data.BillImport.State.Failed -> { { BillCard("Couldn't add the bill", st.message, "OK") { app.shoku.data.BillImport.dismissFailure() } } }
+                            toCheck > 0 -> { { BillCard("Check $toCheck new ${if (toCheck == 1) "item" else "items"} from your bill", "Already in stock. Keep, edit, replace or remove them.", "Review") { reviewingBill = true } } }
+                            else -> null
+                        }
+                    },
                     onBought = planVm::bought, onOpen = { stockUi.open = it }, onStatus = planVm::setStatus,
                     onDismiss = planVm::dismiss, onShowHidden = planVm::showHidden,
                     onBoughtWeek = { w -> planVm.boughtWeek(w) },
@@ -365,6 +395,31 @@ private fun LibraryList(
         )
     }
     app.shoku.ui.plan.StockSheets(planVm, stockUi)
+    if (choosingBill) {
+        androidx.compose.material3.ModalBottomSheet(onDismissRequest = { choosingBill = false }, containerColor = app.shoku.ui.theme.ShokuColors.Paper, shape = app.shoku.ui.theme.ShokuShapes.Sheet) {
+            Column(Modifier.padding(horizontal = 20.dp).navigationBarsPadding().padding(bottom = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Add a bill to stock", style = MaterialTheme.typography.headlineSmall)
+                Text("Your foods get their stock straight away; new things are added too, for you to check. Tip: share the receipt from the Lidl app to Shoku.",
+                    style = MaterialTheme.typography.bodyMedium, color = app.shoku.ui.theme.ShokuColors.Muted)
+                app.shoku.ui.components.PrimaryButton("Screenshots from the gallery", onClick = {
+                    choosingBill = false
+                    billGallery.launch(androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly))
+                })
+                app.shoku.ui.components.SecondaryButton("Photo of a paper bill", onClick = { choosingBill = false; billCamera.launch(billPhotoUri) })
+            }
+        }
+    }
+    if (reviewingBill) {
+        val reviewScope = androidx.compose.runtime.rememberCoroutineScope()
+        app.shoku.ui.plan.BillReviewSheet(
+            bills = bills,
+            onEdit = { l -> reviewingBill = false; stock.levels.firstOrNull { it.item.foodId == l.foodId }?.let { stockUi.open = it.item } },
+            onReplace = { l -> reviewingBill = false; planVm.replacingBill = l; stockUi.searching = true },
+            onRemove = { lines -> reviewScope.launch { lines.forEach { app.shoku.data.BillImport.remove(shoku, it) } } },
+            onAddAnyway = { text -> reviewingBill = false; planVm.sayStock(text) },
+            onDismiss = { reviewingBill = false },
+        )
+    }
     if (vm.pickingCook) {
         CookPicker(
             library = library,
@@ -579,6 +634,23 @@ private fun CookPicker(library: Library, onPick: (String) -> Unit, onNewDish: (S
                             style = MaterialTheme.typography.bodySmall, color = ShokuColors.Muted)
                     }
                 }
+            }
+        }
+    }
+}
+
+/** The card above Stock about a bill: reading it, or new items to check. */
+@Composable
+private fun BillCard(title: String, text: String, action: String?, onAction: () -> Unit = {}) {
+    app.shoku.ui.components.OutlinedCard(Modifier.fillMaxWidth(), onClick = if (action != null) onAction else null) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleMedium)
+                Text(text, style = MaterialTheme.typography.bodySmall, color = app.shoku.ui.theme.ShokuColors.Muted)
+            }
+            if (action != null) {
+                Spacer(Modifier.width(10.dp))
+                app.shoku.ui.components.StatusChip(action, app.shoku.ui.components.ChipStyle.Filled)
             }
         }
     }

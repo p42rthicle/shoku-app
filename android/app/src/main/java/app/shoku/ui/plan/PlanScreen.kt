@@ -206,6 +206,9 @@ class PlanViewModel(
 
     private suspend fun libraryWith(foodId: String) = repo.library.first { it.foods.containsKey(foodId) }
 
+    /** A bill line being replaced by another food: set from the review, used when that food's stock is added. */
+    var replacingBill: app.shoku.data.BillImport.Line? = null
+
     /** True from picking a food for stock until its amount sheet is up (so Add can wait to come back). */
     val picking = kotlinx.coroutines.flow.MutableStateFlow(false)
 
@@ -259,6 +262,7 @@ class PlanViewModel(
             val keys = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { ai.libraryKeys(lib, extra = ai.referenceCandidates(text, reference, lib)) }
             val items = ai.resolve(ai.meal(text, keys).items, keys, lib, byEye = false)
             var added = 0
+            val review = ArrayList<app.shoku.data.BillImport.Line>()
             for (it in items) {
                 val (foodId, unit, qty) = when {
                     it.reference != null -> Triple(repo.adoptReference(it.reference), it.unit, it.qty)
@@ -275,9 +279,17 @@ class PlanViewModel(
                 }
                 val l = libraryWith(foodId)
                 val amount = l.inFoodUnit(foodId, unit, qty) ?: continue
-                home.addFoodStock(l.foods.getValue(foodId), amount)
+                val food = l.foods.getValue(foodId)
+                val newStock = home.stockFor(foodId) == null
+                home.addFoodStock(food, amount)
                 added++
+                // A new food (database or estimate): to check, like a bill's new items.
+                if (it.refType != app.shoku.data.db.RefType.FOOD) review += app.shoku.data.BillImport.Line(
+                    java.util.UUID.randomUUID().toString(), it.said, food.name, food.id, amount, food.unit,
+                    if (it.reference != null) "database" else "estimate", created = true, newStock = newStock,
+                )
             }
+            app.shoku.data.BillImport.record(review)
             "Added $added ${if (added == 1) "item" else "items"} to stock. Check the amounts below."
         }.onSuccess { busy.value = it }.onFailure { if (it !is kotlinx.coroutines.CancellationException) busy.value = it.message ?: "AI request failed" }
         sayWorking.value = false

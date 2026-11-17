@@ -37,6 +37,7 @@ open class ShokuApplication : Application() {
         app.shoku.data.DietNotes.init(this)
         app.shoku.data.PhotoStore.init(this)
         app.shoku.data.ai.AiMemory.init(this)
+        app.shoku.data.BillImport.init(this)
         app.shoku.data.reference.OfflineProducts.init(this)
         app.shoku.data.ai.AiSettings.init(this)
         // One-time grouping into generic foods; idempotent, so a flag only saves the work.

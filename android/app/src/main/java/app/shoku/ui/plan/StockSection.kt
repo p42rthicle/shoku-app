@@ -107,6 +107,9 @@ fun LazyListScope.stockSection(
     onScan: () -> Unit,
     onSearch: () -> Unit,
     onSay: () -> Unit,
+    /** Add a bill (screenshots or a photo); and the card about bills (working, or new items to check). */
+    onBill: () -> Unit = {},
+    billCard: (@Composable () -> Unit)? = null,
     onBought: (ShoppingItem) -> Unit,
     onOpen: (StockItem) -> Unit,
     onStatus: (StockItem, String) -> Unit,
@@ -135,11 +138,13 @@ fun LazyListScope.stockSection(
         shopping = view.shopping.filter { hit(it.name) || brandHit(it.foodId) },
         week = view.week.filter { hit(it.name) || brandHit(it.foodId) },
     )
+    if (billCard != null) item(key = "bill-card") { billCard() }
     item(key = "stock-add") {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             SecondaryButton("Scan", onClick = onScan, modifier = Modifier.weight(1f))
             SecondaryButton("Find & add", onClick = onSearch, modifier = Modifier.weight(1f))
             SecondaryButton("Say it", onClick = onSay, modifier = Modifier.weight(1f))
+            SecondaryButton("Bill", onClick = onBill, modifier = Modifier.weight(1f))
         }
         busy?.let { Spacer(Modifier.height(8.dp)); Text(it, style = MaterialTheme.typography.bodySmall, color = ShokuColors.Muted) }
     }
