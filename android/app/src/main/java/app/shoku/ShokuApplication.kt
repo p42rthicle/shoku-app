@@ -64,6 +64,11 @@ open class ShokuApplication : Application() {
                     .onSuccess { prefs.edit().putBoolean("billPlaces_v2", true).apply() }
                     .onFailure { android.util.Log.e("Shoku", "Repairing bill places failed", it) }
             }
+            if (!prefs.getBoolean("spicesCounted_v1", false)) {
+                runCatching { home.countStatusItems() }
+                    .onSuccess { prefs.edit().putBoolean("spicesCounted_v1", true).apply() }
+                    .onFailure { android.util.Log.e("Shoku", "Counting spices failed", it) }
+            }
             if (!prefs.getBoolean("foodFamilies_v1", false)) {
                 runCatching { repository.applyFoodFamilies() }
                     .onSuccess { prefs.edit().putBoolean("foodFamilies_v1", true).apply() }

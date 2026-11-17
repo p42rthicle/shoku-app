@@ -34,6 +34,10 @@ data class SupplementState(
     fun due(slot: String, date: LocalDate) = supplements.filter { it.slot == slot && it.isDue(date) }
 }
 
+/** A spice runs low at a fifth of what there was (100 g pack: low at 20 g). */
+fun spiceLow(place: String, qty: Double?): Double? =
+    if (place == StockPlaces.SPICES && qty != null && qty > 0) Math.round(qty * 0.2).toDouble().coerceAtLeast(1.0) else null
+
 /** Supplements, meal plan and home stock (database version 4). */
 class HomeRepository(private val db: ShokuDatabase, scope: CoroutineScope) {
     private val home = db.home()
@@ -119,7 +123,7 @@ class HomeRepository(private val db: ShokuDatabase, scope: CoroutineScope) {
 
     /**
      * Adds [qty] (in the food's own unit) of [food]: a purchase on its existing item, or a new item counted
-     * now. Spices become status-only items ("have").
+     * now. Spices are counted too ("40 g left"), low at a fifth of the pack, with spoon sizes for recipes.
      */
     suspend fun addFoodStock(food: app.shoku.data.db.Food, qty: Double, chosenPlace: String? = null) = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
@@ -127,15 +131,39 @@ class HomeRepository(private val db: ShokuDatabase, scope: CoroutineScope) {
         when {
             existing == null -> {
                 val place = chosenPlace ?: placeFor(food)
-                val spice = place == StockPlaces.SPICES
+                if (place == StockPlaces.SPICES) addSpoons(food)
                 home.upsertStock(listOf(StockItem(
                     java.util.UUID.randomUUID().toString(), food.name, foodId = food.id, unit = food.unit, place = place,
-                    tracked = !spice, countQty = if (spice) null else qty, countedAt = now, status = "have", updatedAt = now,
+                    tracked = true, countQty = qty, countedAt = now, status = "have", lowAt = spiceLow(place, qty), updatedAt = now,
                 )))
             }
-            !existing.tracked -> home.upsertStock(listOf(existing.copy(status = "have", updatedAt = now)))
+            // Status-only or never counted: what was just bought is how much there is now.
+            !existing.tracked || existing.countQty == null -> home.upsertStock(listOf(existing.copy(
+                tracked = true, countQty = qty, countedAt = now, status = "have", lowAt = existing.lowAt ?: spiceLow(existing.place, qty), updatedAt = now,
+            )))
             else -> home.upsertMoves(listOf(StockMove(java.util.UUID.randomUUID().toString(), existing.id, qty, now, "bought")))
         }
+    }
+
+    /** Recipes measure spices in spoons: a spice in grams without them gets the usual sizes (1 tsp ≈ 2.5 g). */
+    suspend fun addSpoons(food: app.shoku.data.db.Food) = withContext(Dispatchers.IO) {
+        if (food.unit != "g") return@withContext
+        val have = db.library().allPortions().filter { it.foodId == food.id && !it.deleted }.map { it.label }
+        val add = listOf("tsp" to 2.5, "tbsp" to 7.5).filter { it.first !in have }
+            .map { (l, q) -> app.shoku.data.db.FoodPortion(java.util.UUID.nameUUIDFromBytes("portion|${food.id}|$l".toByteArray()).toString(), food.id, l, q) }
+        if (add.isNotEmpty()) db.library().upsertPortions(add)
+    }
+
+    /**
+     * One time (0.9.59): status-only stock (spices: "have / low / out") becomes counted. The amount isn't
+     * known yet, so the row asks for it ("Amount not set"); out is 0. Spices get their spoon sizes.
+     */
+    suspend fun countStatusItems() = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        val foods = db.library().allFoods().associateBy { it.id }
+        val rows = home.allStock().filter { !it.deleted && !it.tracked && it.supplementId == null }
+        rows.forEach { i -> if (i.place == StockPlaces.SPICES) i.foodId?.let(foods::get)?.let { addSpoons(it) } }
+        home.upsertStock(rows.map { it.copy(tracked = true, countQty = if (it.status == "out") 0.0 else null, countedAt = now, updatedAt = now) })
     }
 
     suspend fun saveStockItem(item: StockItem) = home.upsertStock(listOf(item.copy(updatedAt = System.currentTimeMillis())))

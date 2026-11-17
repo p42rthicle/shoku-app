@@ -25,6 +25,17 @@ data class Release(val version: String, val date: String, val changes: List<Stri
  */
 val CHANGELOG = listOf(
     Release(
+        "0.9.59", "17 Nov 2026",
+        listOf(
+            "Fixed: Review on the bill card on Stock did nothing (broken in 0.9.57)",
+            "Spices show how much is left (\"≈ 40 g left\"), like the fridge and pantry, and go down as you cook and eat with them",
+            "A new spice keeps the amount you add, and runs low at a fifth of it (100 g: low at 20 g, then it's on To buy)",
+            "Spices you had as have / low / out ask for their amount once: \"Amount not set · tap to add\"",
+            "Spices without spoon sizes get them (1 tsp ≈ 2.5 g, 1 tbsp ≈ 7.5 g), so \"2 tsp\" in a recipe comes off the pack",
+            "Have / low / out moved off the list into the item, for things you'd rather not count",
+        ),
+    ),
+    Release(
         "0.9.58", "17 Nov 2026",
         listOf(
             "Scanning a product named after a brand finds your food of that brand: Nutella (Ferrero) offers your \"Hazelnut chocolate spread\" [Nutella] when the values match, and Use this saves the barcode on it",

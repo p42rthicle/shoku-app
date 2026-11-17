@@ -325,14 +325,14 @@ private fun LibraryList(
                             st is app.shoku.data.BillImport.State.Duplicate -> { {
                                 BillCard(
                                     "Already added?", "This bill looks like the one added on ${app.shoku.data.BillImport.dayTime(st.earlier)}. Nothing was added.",
-                                    "OK", { app.shoku.data.BillImport.dismissFailure() }, "Add it again", { app.shoku.data.BillImport.addAgain(shoku) },
-                                )
+                                    "OK", second = "Add it again", onSecond = { app.shoku.data.BillImport.addAgain(shoku) },
+                                ) { app.shoku.data.BillImport.dismissFailure() }
                             } }
                             toCheck > 0 -> { { BillCard("Check $toCheck new ${if (toCheck == 1) "item" else "items"} from your bill", "Already in stock. Keep, edit, replace or remove them.", "Review") { reviewingBill = true } } }
                             else -> null
                         }
                     },
-                    onBought = planVm::bought, onOpen = { stockUi.open = it }, onStatus = planVm::setStatus,
+                    onBought = planVm::bought, onOpen = { stockUi.open = it },
                     onDismiss = planVm::dismiss, onShowHidden = planVm::showHidden,
                     onBoughtWeek = { w -> planVm.boughtWeek(w) },
                     onDismissWeek = { w -> stock.weekFrom?.let { from -> planVm.dismissWeek(w, from) } },
@@ -671,8 +671,10 @@ private fun CookPicker(library: Library, onPick: (String) -> Unit, onNewDish: (S
 
 /** The card above Stock about a bill: reading it, or new items to check. */
 @Composable
-private fun BillCard(title: String, text: String, action: String?, onAction: () -> Unit = {}, second: String? = null, onSecond: () -> Unit = {}) {
-    // With two choices, only the chips act (a tap on the card picks neither).
+// onAction stays the last parameter: the screen calls BillCard(...) { action }, and a trailing lambda goes to
+// the last one (0.9.57 put onSecond last, so Review and OK did nothing).
+internal fun BillCard(title: String, text: String, action: String?, second: String? = null, onSecond: () -> Unit = {}, onAction: () -> Unit = {}) {
+    // One choice: the whole card and its chip both do it. Two: only the chips act (the card picks neither).
     app.shoku.ui.components.OutlinedCard(Modifier.fillMaxWidth(), onClick = if (action != null && second == null) onAction else null) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -687,7 +689,7 @@ private fun BillCard(title: String, text: String, action: String?, onAction: () 
             }
             if (action != null) {
                 Spacer(Modifier.width(10.dp))
-                Box(Modifier.clip(androidx.compose.foundation.shape.CircleShape).clickable(enabled = second != null, onClick = onAction)) {
+                Box(Modifier.clip(androidx.compose.foundation.shape.CircleShape).clickable(onClick = onAction)) {
                     app.shoku.ui.components.StatusChip(action, app.shoku.ui.components.ChipStyle.Filled)
                 }
             }

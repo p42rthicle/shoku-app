@@ -223,8 +223,8 @@ data class WeekItem(
 /**
  * The shopping list for the [days] starting [from] (next Monday to Sunday): every food in the plan's
  * templates for those days, totalled in its own unit, minus what's in stock for its family. Batch slots
- * aren't counted (their ingredients depend on what you cook). Spices and other status-only items count
- * as enough unless marked out.
+ * aren't counted (their ingredients depend on what you cook). Status-only items count as enough unless
+ * marked out, and so do items whose amount isn't entered yet.
  */
 fun Library.weekShopping(plan: PlanState, levels: List<StockLevel>, from: LocalDate, days: Int = 7): List<WeekItem> {
     val need = LinkedHashMap<String, Double>()
@@ -245,7 +245,8 @@ fun Library.weekShopping(plan: PlanState, levels: List<StockLevel>, from: LocalD
     return need.mapNotNull { (foodId, amount) ->
         val f = foods[foodId] ?: return@mapNotNull null
         val family = levels.filter { l -> l.item.foodId != null && familyKey(l.item.foodId) == familyKey(foodId) && l.item.supplementId == null }
-        if (family.any { !it.item.tracked && it.item.status != "out" }) return@mapNotNull null
+        // Status-only, or counted but the amount not entered yet: there is some, so nothing to buy.
+        if (family.any { (!it.item.tracked && it.item.status != "out") || (it.item.tracked && it.item.countQty == null && it.item.supplementId == null) }) return@mapNotNull null
         val have = family.filter { it.item.tracked }.sumOf { l ->
             val q = l.qty ?: return@sumOf 0.0
             when {

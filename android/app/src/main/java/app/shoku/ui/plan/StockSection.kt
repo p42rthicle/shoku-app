@@ -104,10 +104,12 @@ private fun friendly(view: StockView, i: StockItem): Pair<String, Double>? =
 private fun levelText(l: StockLevel, hint: Pair<String, Double>? = null): String {
     val i = l.item
     if (!i.tracked) return when (i.status) { "low" -> "Running low"; "out" -> "Out"; else -> "Have it" }
-    val qty = l.qty ?: return "Not counted"
+    val qty = l.qty ?: return "Amount not set · tap to add"
+    if (qty <= 0.0) return "Used up"
     val days = l.daysLeft?.let { if (it > 60) " · lasts months" else " · ~${Math.round(it)} days" } ?: ""
     val about = hint?.takeIf { it.second > 0 }?.let { (label, size) -> " · about ${formatUnitQty(Math.round(qty / size * 10) / 10.0, label)}" } ?: ""
-    return "≈ ${formatUnitQty(Math.round(qty * 10) / 10.0, i.unit)}$about$days"
+    val low = if (i.lowAt != null && qty <= i.lowAt) " · running low" else ""
+    return "≈ ${formatUnitQty(Math.round(qty * 10) / 10.0, i.unit)} left$about$days$low"
 }
 
 private fun bestBeforeText(i: StockItem, today: LocalDate): Pair<String, Boolean>? {
@@ -131,7 +133,6 @@ fun LazyListScope.stockSection(
     billCard: (@Composable () -> Unit)? = null,
     onBought: (ShoppingItem) -> Unit,
     onOpen: (StockItem) -> Unit,
-    onStatus: (StockItem, String) -> Unit,
     onDismiss: (ShoppingItem) -> Unit,
     onShowHidden: () -> Unit,
     onBoughtWeek: (app.shoku.domain.WeekItem) -> Unit = {},
@@ -190,13 +191,6 @@ fun LazyListScope.stockSection(
                             app.shoku.ui.components.NameWithTag(l.item.name, l.item.foodId?.let { view.brands[it] }, MaterialTheme.typography.titleMedium)
                             Text(levelText(l, friendly(view, l.item)), style = MaterialTheme.typography.bodySmall, color = ShokuColors.Muted)
                             bestBeforeText(l.item, today)?.let { (t, warn) -> Text(t, style = MaterialTheme.typography.bodySmall, color = if (warn) ShokuColors.Over else ShokuColors.Muted) }
-                        }
-                        if (!l.item.tracked) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                listOf("have" to "Have", "low" to "Low", "out" to "Out").forEach { (k, label) ->
-                                    Box(Modifier.clip(CircleShape).clickable { onStatus(l.item, k) }) { StatusChip(label, if (l.item.status == k) ChipStyle.Filled else ChipStyle.Tinted) }
-                                }
-                            }
                         }
                     }
                 }
@@ -271,13 +265,6 @@ fun LazyListScope.stockSection(
                             Text(levelText(l, friendly(view, l.item)), style = MaterialTheme.typography.bodySmall, color = ShokuColors.Muted)
                             bestBeforeText(l.item, today)?.let { (t, warn) -> Text(t, style = MaterialTheme.typography.bodySmall, color = if (warn) ShokuColors.Over else ShokuColors.Muted) }
                         }
-                        if (!l.item.tracked) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                listOf("have" to "Have", "low" to "Low", "out" to "Out").forEach { (k, label) ->
-                                    Box(Modifier.clip(CircleShape).clickable { onStatus(l.item, k) }) { StatusChip(label, if (l.item.status == k) ChipStyle.Filled else ChipStyle.Tinted) }
-                                }
-                            }
-                        }
                     }
                 }
             }
@@ -317,6 +304,7 @@ fun StockItemEditor(
     var low by remember { mutableStateOf(i.lowAt?.let { formatQty(it) } ?: "") }
     var bestBefore by remember { mutableStateOf(i.bestBefore ?: "") }
     var tracked by remember { mutableStateOf(i.tracked) }
+    var status by remember { mutableStateOf(i.status) }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = ShokuColors.Paper, shape = ShokuShapes.Sheet) {
         Column(
             Modifier.padding(horizontal = 20.dp).navigationBarsPadding().imePadding().verticalScroll(rememberScrollState()).padding(bottom = 16.dp),
@@ -334,7 +322,14 @@ fun StockItemEditor(
                 }
             }
             level.perDay?.let { Text("Uses about ${formatUnitQty(Math.round(it * 10) / 10.0, i.unit)} a day", style = MaterialTheme.typography.bodySmall, color = ShokuColors.Muted) }
-            SwitchRow("Track the amount", if (tracked) "Goes down as you eat and cook" else "Status only: have / low / out (for spices)", tracked, { tracked = it })
+            SwitchRow("Track the amount", if (tracked) "Goes down as you eat and cook; below \"Buy below\" it's running low and goes on To buy" else "No amount, just have / low / out", tracked, { tracked = it })
+            if (!tracked && i.supplementId == null) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("have" to "Have", "low" to "Low", "out" to "Out").forEach { (k, label) ->
+                        Box(Modifier.clip(CircleShape).clickable { status = k }) { StatusChip(label, if (status == k) ChipStyle.Filled else ChipStyle.Tinted) }
+                    }
+                }
+            }
             if (tracked && i.supplementId == null) {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     LabeledField("There's now", count, { count = it }, Modifier.weight(1f), numeric = true, suffix = choices[unitIdx].first)
@@ -418,7 +413,9 @@ fun StockItemEditor(
             PrimaryButton("Save", onClick = {
                 val bb = bestBefore.trim().takeIf { runCatching { LocalDate.parse(it) }.isSuccess }
                 val newCount = count.toAmount()?.times(factor)?.takeIf { tracked && it >= 0 && (level.qty == null || Math.abs(it - level.qty) > 0.05 * factor + 0.05) } // shown in pc, 38 × 39.9 isn't a recount
-                onSave(i.copy(place = place, lowAt = low.toAmount()?.times(factor), bestBefore = bb, tracked = tracked, countQty = i.countQty ?: newCount), newCount)
+                // A spice counted for the first time runs low at a fifth of it, unless a mark is set.
+                val lowAt = low.toAmount()?.times(factor) ?: if (i.countQty == null && newCount != null) app.shoku.data.spiceLow(place, newCount) else null
+                onSave(i.copy(place = place, lowAt = lowAt, bestBefore = bb, tracked = tracked, status = status, countQty = i.countQty ?: newCount), newCount)
             })
             var confirm by remember { mutableStateOf(false) }
             Text(if (confirm) "Tap again to remove it" else "Remove from stock", style = MaterialTheme.typography.labelLarge,
