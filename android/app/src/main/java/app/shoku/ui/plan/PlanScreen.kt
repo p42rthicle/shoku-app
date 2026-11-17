@@ -220,7 +220,9 @@ class PlanViewModel(
                 if (type != app.shoku.data.db.RefType.FOOD) { busy.value = "Only foods can go in stock"; return@launch }
                 val food = libraryWith(id).foods.getValue(id)
                 val online = (pick as? app.shoku.ui.today.ReplacePick.Online)?.product?.packQty
-                amountFor.value = food to (online ?: packAmount(food))
+                // Replacing a bill line: start at what the bill added.
+                val fromBill = replacingBill?.takeIf { it.unit == food.unit }?.qty
+                amountFor.value = food to (fromBill ?: online ?: packAmount(food))
             } finally { picking.value = false }
         }
     }
@@ -325,6 +327,11 @@ class PlanViewModel(
     }
 
     fun deleteStock(item: app.shoku.data.db.StockItem) = viewModelScope.launch { home.deleteStockItem(item) }
+
+    /** A unit for a food ("pc" = 150 g), added from its stock card. */
+    fun addUnit(foodId: String, label: String, size: Double) = viewModelScope.launch {
+        repo.savePortions(listOf(app.shoku.data.db.FoodPortion(ShokuRepository.newId(), foodId, label, size)))
+    }
     fun setStatus(item: app.shoku.data.db.StockItem, status: String) = viewModelScope.launch { home.saveStockItem(item.copy(status = status)) }
 
     val supplements: StateFlow<SupplementState> = home.supplements

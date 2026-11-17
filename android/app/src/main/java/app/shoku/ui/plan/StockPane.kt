@@ -24,6 +24,10 @@ class StockUi {
     var editFood by mutableStateOf<StockItem?>(null)
     /** A food stock item being turned into a supplement. */
     var moving by mutableStateOf<StockItem?>(null)
+    /** Text to start the Find & add search with ("Add anyway" on a bill line). */
+    var searchText by mutableStateOf("")
+    /** The bill line whose stock card is open (from the review): saving checks it and returns to the review. */
+    var billLine by mutableStateOf<app.shoku.data.BillImport.Line?>(null)
 }
 
 /** Words that mark a supplement rather than a food, so "add to stock" starts on Supplement. */
@@ -77,7 +81,9 @@ fun StockSheets(vm: PlanViewModel, ui: StockUi, onStockAdded: ((String) -> Unit)
         app.shoku.ui.today.FoodSearchSheet(
             if (replacing != null) "Replace ${replacing.name}" else "Add to stock",
             replacing?.let { "On the bill: ${it.said}" }, lib, reference,
-            onPick = { ui.searching = false; vm.pickForStock(it) }, onDismiss = { ui.searching = false; vm.replacingBill = null }, foodsOnly = true,
+            onPick = { ui.searching = false; ui.searchText = ""; vm.pickForStock(it) },
+            onDismiss = { ui.searching = false; ui.searchText = ""; if (vm.replacingBill != null) { vm.replacingBill = null; app.shoku.data.BillImport.openReview.value = true } },
+            foodsOnly = true, initialQuery = ui.searchText,
         )
     }
     if (ui.saying) {
@@ -130,12 +136,16 @@ fun StockSheets(vm: PlanViewModel, ui: StockUi, onStockAdded: ((String) -> Unit)
                         vm.replacingBill = null
                         val shoku = context.applicationContext as ShokuApplication
                         shoku.appScope.launch { app.shoku.data.BillImport.replaced(shoku, line, food, lib.inFoodUnit(food.id, r.unit, r.qty) ?: r.qty) }
+                        app.shoku.data.BillImport.openReview.value = true // back to the review
                     }
                     val msg = "Added ${app.shoku.ui.formatUnitQty(r.qty, r.unit)} ${food.name} to stock"
                     if (onStockAdded != null) onStockAdded(msg)
                     else android.widget.Toast.makeText(context.applicationContext, msg, android.widget.Toast.LENGTH_SHORT).show()
                 },
-                onDismiss = { vm.amountFor.value = null; vm.replacingBill = null },
+                onDismiss = {
+                    vm.amountFor.value = null
+                    if (vm.replacingBill != null) { vm.replacingBill = null; app.shoku.data.BillImport.openReview.value = true }
+                },
             )
         }
     }
@@ -145,6 +155,8 @@ fun StockSheets(vm: PlanViewModel, ui: StockUi, onStockAdded: ((String) -> Unit)
                 level,
                 onSave = { i, n ->
                     vm.saveStock(i, n); ui.open = null
+                    // Edited from the bill review: that line is checked; back to the review.
+                    ui.billLine?.let { line -> app.shoku.data.BillImport.looksRight(line); ui.billLine = null; app.shoku.data.BillImport.openReview.value = true }
                     android.widget.Toast.makeText(context, "${i.name}: stock updated", android.widget.Toast.LENGTH_SHORT).show()
                     app.shoku.ui.search.SearchReturn.go()
                 },
@@ -153,8 +165,12 @@ fun StockSheets(vm: PlanViewModel, ui: StockUi, onStockAdded: ((String) -> Unit)
                     android.widget.Toast.makeText(context, "${it.name} removed from stock", android.widget.Toast.LENGTH_SHORT).show()
                     app.shoku.ui.search.SearchReturn.go()
                 },
-                onDismiss = { ui.open = null; app.shoku.ui.search.SearchReturn.go() },
+                onDismiss = {
+                    ui.open = null; app.shoku.ui.search.SearchReturn.go()
+                    if (ui.billLine != null) { ui.billLine = null; app.shoku.data.BillImport.openReview.value = true }
+                },
                 onEditFood = item.foodId?.takeIf { lib?.foods?.containsKey(it) == true }?.let { { ui.editFood = item; ui.open = null } },
+                onAddUnit = item.foodId?.takeIf { lib?.foods?.containsKey(it) == true }?.let { fid -> { label: String, size: Double -> vm.addUnit(fid, label, size) } },
                 units = item.foodId?.let { stock.units[it] }.orEmpty(),
                 onMoveToSupplements = item.foodId?.takeIf { lib?.foods?.containsKey(it) == true }?.let { { ui.moving = item; ui.open = null } },
             )

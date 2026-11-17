@@ -77,6 +77,25 @@ data class StockView(
 /** The latest [StockView.texts], kept current by ShokuApp, so any Edit food sheet can show what's at home. */
 object StockText { val map = kotlinx.coroutines.flow.MutableStateFlow<Map<String, String>>(emptyMap()) }
 
+/**
+ * Only what matches [query], by name or by brand: "SDS" or "Haldi Ram" (= Haldiram's; spaces and
+ * apostrophes don't matter for brands) finds everything of that brand.
+ */
+fun StockView.matching(query: String): StockView {
+    if (query.isBlank()) return this
+    fun hit(name: String) = app.shoku.domain.matchesAll(app.shoku.domain.searchKey(name), query)
+    val compact = app.shoku.domain.searchKey(query).filter { it.isLetterOrDigit() }
+    fun brandHit(foodId: String?): Boolean {
+        val b = foodId?.let { brands[it] } ?: return false
+        return hit(b) || (compact.length >= 3 && compact in app.shoku.domain.searchKey(b).filter { it.isLetterOrDigit() })
+    }
+    return copy(
+        levels = levels.filter { hit(it.item.name) || brandHit(it.item.foodId) },
+        shopping = shopping.filter { hit(it.name) || brandHit(it.foodId) },
+        week = week.filter { hit(it.name) || brandHit(it.foodId) },
+    )
+}
+
 /** A household unit to show next to grams ("about 6 pc"), if the food has one. */
 private fun friendly(view: StockView, i: StockItem): Pair<String, Double>? =
     i.foodId?.let { view.units[it] }?.drop(1)?.takeIf { i.unit in app.shoku.domain.WEIGHT_UNITS }
@@ -125,19 +144,8 @@ fun LazyListScope.stockSection(
 ) {
     val today = LocalDate.now()
     val searching = query.isNotBlank()
-    fun hit(name: String) = !searching || app.shoku.domain.matchesAll(app.shoku.domain.searchKey(name), query)
-    // A brand finds everything of that brand ("SDS", "Haldi Ram" = Haldiram's: spaces and apostrophes don't matter).
-    val compactQuery = app.shoku.domain.searchKey(query).filter { it.isLetterOrDigit() }
-    fun brandHit(foodId: String?): Boolean {
-        val b = foodId?.let { view.brands[it] } ?: return false
-        return hit(b) || (compactQuery.length >= 3 && compactQuery in app.shoku.domain.searchKey(b).filter { it.isLetterOrDigit() })
-    }
     val open = if (searching) open + listOf("shop", "week") + StockPlaces.ALL.map { "place-$it" } else open
-    val view = view.copy(
-        levels = view.levels.filter { hit(it.item.name) || brandHit(it.item.foodId) },
-        shopping = view.shopping.filter { hit(it.name) || brandHit(it.foodId) },
-        week = view.week.filter { hit(it.name) || brandHit(it.foodId) },
-    )
+    val view = view.matching(query)
     if (billCard != null) item(key = "bill-card") { billCard() }
     item(key = "stock-add") {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -292,10 +300,17 @@ fun StockItemEditor(
     onMoveToSupplements: (() -> Unit)? = null,
     /** Opens the food itself (its editor: name, values, units). */
     onEditFood: (() -> Unit)? = null,
+    /** A new unit for the food ("pc" = 150 g), to count in straight away. */
+    onAddUnit: ((String, Double) -> Unit)? = null,
 ) {
     val i = level.item
     val choices = units.ifEmpty { listOf(i.unit to 1.0) }
     var unitIdx by remember { mutableStateOf(0) }
+    var addingUnit by remember { mutableStateOf(false) }
+    var newUnit by remember { mutableStateOf("pc") }
+    var newUnitSize by remember { mutableStateOf("") }
+    // A unit just added: switch to it once it's in the list (the amount converts).
+    var selectNext by remember { mutableStateOf<String?>(null) }
     val factor = choices[unitIdx].second
     var count by remember { mutableStateOf(level.qty?.let { formatQty(Math.round(it * 10) / 10.0) } ?: "") }
     var place by remember { mutableStateOf(i.place) }
@@ -325,20 +340,38 @@ fun StockItemEditor(
                     LabeledField("There's now", count, { count = it }, Modifier.weight(1f), numeric = true, suffix = choices[unitIdx].first)
                     LabeledField("Buy below", low, { low = it }, Modifier.weight(1f), numeric = true, suffix = choices[unitIdx].first)
                 }
-                if (choices.size > 1) {
+                fun switchTo(k: Int) {
+                    if (k == unitIdx) return
+                    val from = choices[unitIdx].second
+                    val size = choices[k].second
+                    fun conv(t: String) = t.toAmount()?.let { formatQty(Math.round(it * from / size * 10) / 10.0) } ?: t
+                    count = conv(count); low = conv(low)
+                    unitIdx = k
+                }
+                androidx.compose.runtime.LaunchedEffect(choices, selectNext) {
+                    val want = selectNext ?: return@LaunchedEffect
+                    val k = choices.indexOfFirst { it.first == want }
+                    if (k >= 0) { switchTo(k); selectNext = null }
+                }
+                if (choices.size > 1 || onAddUnit != null) {
                     // Show the amount in another unit: 1520 g = 38 pc. The numbers convert; what's saved is the same.
                     Text("Counted in", style = MaterialTheme.typography.titleSmall, color = ShokuColors.Muted)
                     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        choices.forEachIndexed { k, (label, size) ->
-                            Box(Modifier.clip(CircleShape).clickable {
-                                if (k != unitIdx) {
-                                    val from = choices[unitIdx].second
-                                    fun conv(t: String) = t.toAmount()?.let { formatQty(Math.round(it * from / size * 10) / 10.0) } ?: t
-                                    count = conv(count); low = conv(low)
-                                    unitIdx = k
-                                }
-                            }) { StatusChip(label, if (k == unitIdx) ChipStyle.Filled else ChipStyle.Tinted) }
+                        choices.forEachIndexed { k, (label, _) ->
+                            Box(Modifier.clip(CircleShape).clickable { switchTo(k) }) { StatusChip(label, if (k == unitIdx) ChipStyle.Filled else ChipStyle.Tinted) }
                         }
+                        if (onAddUnit != null) Box(Modifier.clip(CircleShape).clickable { addingUnit = !addingUnit }) { StatusChip("+ unit", ChipStyle.Tinted) }
+                    }
+                    if (addingUnit && onAddUnit != null) Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        LabeledField("Unit", newUnit, { newUnit = it }, Modifier.weight(1f), placeholder = "pc, pack")
+                        LabeledField("One is", newUnitSize, { newUnitSize = it }, Modifier.weight(1f), numeric = true, suffix = i.unit)
+                        Text("Add", style = MaterialTheme.typography.labelLarge, color = ShokuColors.Ink, modifier = Modifier.clip(ShokuShapes.Button).clickable {
+                            val label = newUnit.trim()
+                            val size = newUnitSize.toAmount()
+                            if (label.isNotEmpty() && size != null && size > 0) {
+                                onAddUnit(label, size); selectNext = label; addingUnit = false; newUnitSize = ""
+                            }
+                        }.padding(10.dp))
                     }
                     if (factor != 1.0) count.toAmount()?.let { n ->
                         Text("= ${formatUnitQty(Math.round(n * factor * 10) / 10.0, i.unit)}", style = MaterialTheme.typography.bodySmall, color = ShokuColors.Muted)
@@ -380,6 +413,7 @@ fun StockItemEditor(
                 }
             }
             Spacer(Modifier.height(4.dp))
+            if (onEditFood != null) app.shoku.ui.components.SecondaryButton("Edit the food: name, values, units", onClick = onEditFood)
             if (onMoveToSupplements != null) app.shoku.ui.components.SecondaryButton("It's a supplement: move to Supplements", onClick = onMoveToSupplements)
             PrimaryButton("Save", onClick = {
                 val bb = bestBefore.trim().takeIf { runCatching { LocalDate.parse(it) }.isSuccess }

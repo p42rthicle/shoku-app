@@ -174,7 +174,11 @@ class HomeRepository(private val db: ShokuDatabase, scope: CoroutineScope) {
     fun placeFor(food: app.shoku.data.db.Food): String {
         val n = app.shoku.domain.searchKey("${food.name} ${food.aliases}")
         return when {
-            listOf("masala", "powder", "spice", "jeera", "cumin", "haldi", "turmeric", "chilli", "pepper", "salt", "hing", "garam", "seasoning", "marinade").any { it in n } -> StockPlaces.SPICES
+            // Clearly a spice first ("chilli flakes", "paprika powder"); then fresh vegetables and herbs, which share
+            // words with spices ("red bell pepper", "fresh coriander", "green chilli") but are counted, in the fridge.
+            listOf("masala", "powder", "flakes", "ground", "pulver", "gemahlen", "spice", "jeera", "cumin", "haldi", "turmeric", "hing", "garam", "seasoning", "marinade").any { it in n } -> StockPlaces.SPICES
+            listOf("bell pepper", "capsicum", "paprika rot", "paprika gelb", "paprika grun", "red pepper", "green pepper", "yellow pepper", "fresh", "green chilli", "cucumber", "gurke", "tomato", "tomate", "coriander", "koriander", "spinach", "lettuce", "salad", "zucchini", "carrot", "karotte", "mushroom", "pilz").any { it in n } -> StockPlaces.FRIDGE
+            listOf("chilli", "pepper", "salt").any { it in n } -> StockPlaces.SPICES
             listOf("frozen", "tiefkuhl", "fries", "pommes", "nugget", "ice cream", "gelato", "pizza").any { it in n } -> StockPlaces.FREEZER
             listOf("milk", "yogurt", "joghurt", "skyr", "paneer", "egg", "chicken", "cheese", "kase", "butter", "cream", "kefir", "tofu", "curd", "pudding").any { it in n } -> StockPlaces.FRIDGE
             else -> StockPlaces.PANTRY

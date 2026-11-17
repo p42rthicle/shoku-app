@@ -104,17 +104,56 @@ object BillImport {
         }
     }
 
+    /** What adding a read bill needs; tests swap in their own (no network). */
+    class Deps(
+        val repo: ShokuRepository,
+        val home: HomeRepository,
+        val reference: app.shoku.data.reference.ReferenceData?,
+        /** Open Food Facts' best hit for a product search. */
+        val offSearch: suspend (String) -> app.shoku.data.reference.ScannedProduct? = { q -> OpenFoodFacts.search(q, 3).firstOrNull() },
+        /** Between Open Food Facts lookups: it asks apps to go slow. */
+        val pause: suspend () -> Unit = { delay(1500) },
+    )
+
     private suspend fun run(shoku: ShokuApplication, pieces: List<String>) {
-        val repo = shoku.repository
-        val home = shoku.home
         val ai = AiClient()
-        val lib = repo.library.first()
+        val lib = shoku.repository.library.first()
         val keys = ai.libraryKeys(lib)
         val result = ai.bill(pieces, keys)
+        val bill = add(Deps(shoku.repository, shoku.home, shoku.reference), lib, keys, result) { state.value = State.Working(it) }
+        val lines = bill.lines
+        // Nothing readable (a dark or blurry photo, not a bill): say so instead of "0 items".
+        if (lines.isEmpty() && bill.skipped.isEmpty()) {
+            val msg = "No food found on that bill. Try a sharper photo, or a screenshot from the store's app."
+            state.value = State.Failed(msg)
+            notify(shoku, "Couldn't read the bill", msg)
+            return
+        }
+        save(listOf(bill) + bills.value)
+        state.value = State.Idle
+        val mine = lines.count { it.source == "yours" }
+        val fresh = lines.size - mine
+        notify(
+            shoku, "Bill added: ${lines.size} ${if (lines.size == 1) "item" else "items"} to stock",
+            listOfNotNull(
+                if (mine > 0) "$mine matched your foods" else null,
+                if (fresh > 0) "$fresh new, review them" else null,
+                if (result.skipped.isNotEmpty()) "${result.skipped.size} not food, not added" else null,
+            ).joinToString(" · "),
+        )
+    }
+
+/**
+     * Adds a read bill to stock: your foods straight onto their stock; new things as foods (Open Food Facts
+     * for packaged products, the databases for loose ones, the estimate last), with "pc" from [AiBillItem.pieceGrams].
+     */
+    suspend fun add(d: Deps, lib: app.shoku.domain.Library, keys: AiClient.LibraryKeys, result: app.shoku.data.ai.AiBillResult, step: (String) -> Unit = {}): Bill {
+        val repo = d.repo
+        val home = d.home
         val lines = ArrayList<Line>()
         var offCalls = 0
         for ((i, item) in result.items.withIndex()) {
-            state.value = State.Working("Adding ${i + 1} of ${result.items.size}: ${item.name}")
+            step("Adding ${i + 1} of ${result.items.size}: ${item.name}")
             val ref = item.matchKey?.let { keys.refs[it] }
             val own = ref?.takeIf { it.first == RefType.FOOD }?.let { lib.foods[it.second] }
             if (own != null) {
@@ -124,17 +163,13 @@ object BillImport {
                 lines += Line(newId(), item.said, own.name, own.id, qty, own.unit, "yours", newStock = newStock, brand = own.brand)
                 continue
             }
-            // New: Open Food Facts for packaged products (gently: it asks apps to go slow), else the databases, else the estimate.
             var food: Food? = null
             var source = "estimate"
             var packQty: Double? = null
             if (item.packaged && !item.search.isNullOrBlank()) {
-                if (offCalls++ > 0) delay(1500)
-                state.value = State.Working("Looking up ${item.name} on Open Food Facts…")
-                val hit = runCatching {
-                    item.brand?.let { b -> OpenFoodFacts.search("${item.search} $b", 3).firstOrNull() }
-                        ?: OpenFoodFacts.search(item.search!!, 3).firstOrNull()
-                }.getOrNull()
+                if (offCalls++ > 0) d.pause()
+                step("Looking up ${item.name} on Open Food Facts…")
+                val hit = runCatching { item.brand?.let { b -> d.offSearch("${item.search} $b") } ?: d.offSearch(item.search!!) }.getOrNull()
                 if (hit != null) {
                     val (f, portions) = hit.toLibraryFood()
                     repo.saveFood(f, updatePast = false)
@@ -142,8 +177,8 @@ object BillImport {
                     food = f; source = "off"; packQty = hit.packQty
                 }
             }
-            if (food == null && !item.packaged) {
-                val r = (item.search?.let { shoku.reference.search(it, 3) }.orEmpty() + shoku.reference.search(item.name, 3)).firstOrNull()
+            if (food == null && !item.packaged && d.reference != null) {
+                val r = (item.search?.let { d.reference.search(it, 3) }.orEmpty() + d.reference.search(item.name, 3)).firstOrNull()
                 if (r != null) {
                     val id = repo.adoptReference(r)
                     food = repo.library.first { it.foods.containsKey(id) }.foods.getValue(id); source = "database"
@@ -158,6 +193,12 @@ object BillImport {
                 )
                 repo.saveFood(food, updatePast = false)
             }
+            // A piece (a pepper, a cucumber) as a unit, so it can be counted in pieces.
+            val piece = item.pieceGrams?.takeIf { it > 0 && food.unit in app.shoku.domain.WEIGHT_UNITS }
+            if (piece != null && source != "off") {
+                val has = repo.library.first().portionsOf(food).any { it.label == "pc" }
+                if (!has) repo.savePortions(listOf(app.shoku.data.db.FoodPortion(ShokuRepository.newId(), food.id, "pc", piece)))
+            }
             val now = repo.library.first { it.foods.containsKey(food.id) }
             val qty = (if (item.packs != null && packQty != null && packQty > 0) item.packs * packQty else null)
                 ?: amountIn(now, food, item) ?: continue
@@ -165,19 +206,11 @@ object BillImport {
             home.addFoodStock(food, qty)
             lines += Line(newId(), item.said, food.name, food.id, qty, food.unit, source, created = true, newStock = true, brand = food.brand)
         }
-        save(listOf(Bill(System.currentTimeMillis(), lines, result.skipped)) + bills.value)
-        state.value = State.Idle
-        val mine = lines.count { it.source == "yours" }
-        val fresh = lines.size - mine
-        notify(
-            shoku, "Bill added: ${lines.size} ${if (lines.size == 1) "item" else "items"} to stock",
-            listOfNotNull(
-                if (mine > 0) "$mine matched your foods" else null,
-                if (fresh > 0) "$fresh new, review them" else null,
-                if (result.skipped.isNotEmpty()) "${result.skipped.size} not food, not added" else null,
-            ).joinToString(" · "),
-        )
+        return Bill(System.currentTimeMillis(), lines, result.skipped)
     }
+
+    /** Keeps a bill (or Say it's lines) for review. */
+    fun keep(bill: Bill) = save(listOf(bill) + bills.value)
 
     /** The bill line's amount in the food's own unit. */
     private fun amountIn(lib: app.shoku.domain.Library, food: Food, item: AiBillItem): Double? {
@@ -198,20 +231,23 @@ object BillImport {
     fun allLookRight() = save(bills.value.map { b -> b.copy(lines = b.lines.map { it.copy(reviewed = true) }) })
 
     /** Takes a line back out of stock (and its food, when the bill made it and nothing else uses it). */
-    suspend fun remove(shoku: ShokuApplication, line: Line) {
-        undoStock(shoku, line)
+    suspend fun remove(shoku: ShokuApplication, line: Line) = remove(shoku.repository, shoku.home, line)
+
+    suspend fun remove(repo: ShokuRepository, home: HomeRepository, line: Line) {
+        undoStock(repo, home, line)
         update(line.id) { null }
     }
 
     /** Replaced by another food (its stock was just added): the line's own stock and food go. */
-    suspend fun replaced(shoku: ShokuApplication, line: Line, with: Food, qty: Double) {
-        undoStock(shoku, line)
-        update(line.id) { it.copy(foodId = with.id, name = with.name, qty = qty, unit = with.unit, source = "yours", created = false, reviewed = true, brand = with.brand) }
+    suspend fun replaced(shoku: ShokuApplication, line: Line, with: Food, qty: Double) = replaced(shoku.repository, shoku.home, line, with, qty)
+
+    suspend fun replaced(repo: ShokuRepository, home: HomeRepository, line: Line, with: Food, qty: Double) {
+        undoStock(repo, home, line)
+        // The chosen food may have had stock already: removing this line later takes only [qty] back off.
+        update(line.id) { it.copy(foodId = with.id, name = with.name, qty = qty, unit = with.unit, source = "yours", created = false, newStock = false, reviewed = true, brand = with.brand) }
     }
 
-    private suspend fun undoStock(shoku: ShokuApplication, line: Line) {
-        val home = shoku.home
-        val repo = shoku.repository
+    private suspend fun undoStock(repo: ShokuRepository, home: HomeRepository, line: Line) {
         if (line.newStock) home.stockFor(line.foodId)?.let { home.deleteStockItem(it) }
         else home.takeOut(line.foodId, line.qty, "not from the bill")
         if (line.created) {
@@ -221,11 +257,33 @@ object BillImport {
         }
     }
 
+    /**
+     * One time (0.9.56): bill items filed under Spices as have/low/out by mistake ("Red bell pepper" read as
+     * pepper) go to where they belong, counted with the bill's amount.
+     */
+    suspend fun repairPlaces(repo: ShokuRepository, home: HomeRepository) {
+        val lib = repo.library.first()
+        for (line in bills.value.flatMap { it.lines }.filter { it.newStock }) {
+            val item = home.stockFor(line.foodId) ?: continue
+            val food = lib.foods[line.foodId] ?: continue
+            val place = home.placeFor(food)
+            // Wrongly status-only (have/low/out) and not a spice: counted again with the bill's amount; a place
+            // chosen since (Fridge) is kept, only Spices moves.
+            if (!item.tracked && place != app.shoku.data.db.StockPlaces.SPICES) {
+                val keep = item.place.takeIf { it != app.shoku.data.db.StockPlaces.SPICES } ?: place
+                home.saveStockItem(item.copy(place = keep, tracked = true, countQty = line.qty, countedAt = System.currentTimeMillis(), unit = food.unit))
+            }
+        }
+    }
+
     /** Lines from Say it that made new foods, so they show up for checking like a bill's. */
     fun record(lines: List<Line>) {
         if (lines.isEmpty()) return
         save(listOf(Bill(System.currentTimeMillis(), lines)) + bills.value)
     }
+
+    /** A "not food" line being added after all: off the list. */
+    fun dropSkipped(text: String) = save(bills.value.map { b -> b.copy(skipped = b.skipped - text) })
 
     fun dismissFailure() { if (state.value is State.Failed) state.value = State.Idle }
 

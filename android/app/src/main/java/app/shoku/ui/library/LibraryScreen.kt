@@ -413,10 +413,11 @@ private fun LibraryList(
         val reviewScope = androidx.compose.runtime.rememberCoroutineScope()
         app.shoku.ui.plan.BillReviewSheet(
             bills = bills,
-            onEdit = { l -> reviewingBill = false; stock.levels.firstOrNull { it.item.foodId == l.foodId }?.let { stockUi.open = it.item } },
+            onEdit = { l -> reviewingBill = false; stock.levels.firstOrNull { it.item.foodId == l.foodId }?.let { stockUi.billLine = l; stockUi.open = it.item } },
             onReplace = { l -> reviewingBill = false; planVm.replacingBill = l; stockUi.searching = true },
             onRemove = { lines -> reviewScope.launch { lines.forEach { app.shoku.data.BillImport.remove(shoku, it) } } },
-            onAddAnyway = { text -> reviewingBill = false; planVm.sayStock(text) },
+            // Not food by the AI's reading, but it is: find it (or make it New), starting from the line.
+            onAddAnyway = { text -> reviewingBill = false; app.shoku.data.BillImport.dropSkipped(text); stockUi.searchText = text; stockUi.searching = true },
             onDismiss = { reviewingBill = false },
         )
     }

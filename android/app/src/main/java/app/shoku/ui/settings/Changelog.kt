@@ -25,6 +25,19 @@ data class Release(val version: String, val date: String, val changes: List<Stri
  */
 val CHANGELOG = listOf(
     Release(
+        "0.9.56", "17 Nov 2026",
+        listOf(
+            "Fixed: a bill's red bell pepper went into Spices as have/low/out (it read \"pepper\"), so Edit showed no amount; fresh vegetables and herbs now go to the fridge, counted, and the one from your bill is moved",
+            "A stock card can count in a new unit: + unit, \"pc = 150 g\", then switch to it",
+            "New things from a bill come with a piece unit when they're bought in pieces (one red pepper about 150 g)",
+            "Stock cards have a clear \"Edit the food\" button; editing from the bill review returns to it, that item checked",
+            "Bill review: Replace returns to the review and starts at the bill's amount; removing a replaced item takes off only its amount",
+            "Bill review shows the matched items of every bill still being checked, not just the latest",
+            "Add anyway opens Find & add with the line's name filled in",
+            "A photo with no readable bill now says so, instead of \"0 items added\"",
+        ),
+    ),
+    Release(
         "0.9.55", "17 Nov 2026",
         listOf(
             "Bills to stock: share a receipt from the Lidl app to Shoku (\"Add bill to stock\"), or Stock › Bill for screenshots or a photo of a paper bill",

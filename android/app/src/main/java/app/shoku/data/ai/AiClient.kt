@@ -59,6 +59,8 @@ data class AiBillItem(
     val packaged: Boolean = false,
     /** The product as sold, in German, for a database search. */
     val search: String? = null,
+    /** One piece or pack, in g or ml (a red pepper 150): becomes a "pc" unit on a new food. */
+    @SerialName("piece_grams") val pieceGrams: Double? = null,
 )
 
 @Serializable data class AiBillResult(val items: List<AiBillItem>, val skipped: List<String> = emptyList())
