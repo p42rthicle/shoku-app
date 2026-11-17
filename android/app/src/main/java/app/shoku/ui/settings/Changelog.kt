@@ -25,6 +25,14 @@ data class Release(val version: String, val date: String, val changes: List<Stri
  */
 val CHANGELOG = listOf(
     Release(
+        "0.9.60", "17 Nov 2026",
+        listOf(
+            "Bill review always shows your latest bill too, so a bill where everything matched still shows what it added and its \"not food\" lines (Add anyway)",
+            "The same bill is still spotted after you removed or added lines in the review",
+            "Undoing a bill right after adding it removes the foods it made reliably",
+        ),
+    ),
+    Release(
         "0.9.59", "17 Nov 2026",
         listOf(
             "Fixed: Review on the bill card on Stock did nothing (broken in 0.9.57)",

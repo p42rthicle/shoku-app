@@ -64,8 +64,8 @@ fun BillReviewSheet(
     onDismiss: () -> Unit,
 ) {
     val fresh = bills.flatMap { it.toReview }
-    // The bills still being checked (else the latest): their matched lines and what wasn't food.
-    val open = bills.filter { it.toReview.isNotEmpty() }.ifEmpty { bills.take(1) }
+    // The bills still being checked, and always the latest: their matched lines and what wasn't food.
+    val open = BillImport.shown(bills)
     val mine = open.flatMap { b -> b.lines.filter { it.source == "yours" } }
     val skipped = open.flatMap { it.skipped }.distinct()
     val off = remember(fresh.size, mine.size) { mutableStateListOf<String>() } // unticked line ids

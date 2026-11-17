@@ -193,6 +193,9 @@ class BillImportTest {
         // Shared again: the same lines (spacing aside) are spotted.
         val again = AiBillResult(listOf(milkLine.copy(said = "H-Milch 1,5%  0,85 x 2"), pepper, chickpeas), listOf("Pfand 0,25 EM"))
         assertTrue(BillImport.sameAs(again, BillImport.bills.value) != null)
+        // Still spotted after lines were removed in the review: the printed lines are kept.
+        BillImport.bills.value.first().lines.forEach { BillImport.remove(repo, home, it) }
+        assertTrue(BillImport.sameAs(again, BillImport.bills.value) != null)
         // A different shop with one thing in common is not.
         val other = AiBillResult(listOf(pepper, AiBillItem("Gurken", name = "Cucumber", unit = "g", qty = 400.0), AiBillItem("Koriander", name = "Coriander", unit = "g", qty = 30.0)))
         assertNull(BillImport.sameAs(other, BillImport.bills.value))
@@ -230,5 +233,15 @@ class BillImportTest {
         val moves = db.home().allMoves().filter { !it.deleted && it.itemId == item.id }.sumOf { it.delta }
         assertEquals(1200.0, (item.countQty ?: 0.0) + moves, 0.0)
         assertTrue(repo.library.first().foods.containsKey(id))
+    }
+
+    @Test fun theReviewAlwaysShowsTheLatestBill() {
+        fun line(id: String, source: String, reviewed: Boolean = false) =
+            BillImport.Line(id, "said", "name", "f$id", 1.0, "g", source, reviewed = reviewed)
+        val old = BillImport.Bill(1L, listOf(line("a", "estimate")))                         // still to check
+        val done = BillImport.Bill(2L, listOf(line("b", "estimate", reviewed = true)))       // all checked, older
+        val latest = BillImport.Bill(3L, listOf(line("c", "yours")), skipped = listOf("Duschgel")) // all matched
+        assertEquals(listOf(3L, 1L), BillImport.shown(listOf(old, done, latest)).map { it.at })
+        assertTrue(BillImport.shown(emptyList()).isEmpty())
     }
 }

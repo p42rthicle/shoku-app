@@ -373,6 +373,9 @@ class ShokuRepository(private val db: ShokuDatabase, scope: CoroutineScope) {
         lib.upsertPortions(rows.map { it.copy(updatedAt = System.currentTimeMillis()) })
     }
 
+    /** A food straight from the database (the [library] flow can trail a save by a moment). */
+    suspend fun foodNow(id: String): Food? = withContext(Dispatchers.IO) { lib.allFoods().firstOrNull { it.id == id && !it.deleted } }
+
     suspend fun foodByBarcode(barcode: String): Food? = withContext(Dispatchers.IO) {
         lib.allFoods().firstOrNull { it.barcode == barcode && !it.deleted }
     }

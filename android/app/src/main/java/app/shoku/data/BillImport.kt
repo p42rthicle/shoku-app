@@ -62,7 +62,13 @@ object BillImport {
     }
 
     @Serializable
-    data class Bill(val at: Long, val lines: List<Line>, val skipped: List<String> = emptyList()) {
+    data class Bill(
+        val at: Long,
+        val lines: List<Line>,
+        val skipped: List<String> = emptyList(),
+        /** Every line as printed, kept as read (lines removed or added anyway later don't change it): spots the same bill again. */
+        val printed: List<String> = emptyList(),
+    ) {
         val toReview get() = lines.filter { it.source != "yours" && !it.reviewed }
     }
 
@@ -85,6 +91,15 @@ object BillImport {
         val kept = list.sortedByDescending { it.at }.filterIndexed { i, b -> i < 3 || b.toReview.isNotEmpty() }.take(10)
         bills.value = kept
         prefs.edit().putString("bills", json.encodeToString(ListSerializer(Bill.serializer()), kept)).apply()
+    }
+
+    /**
+     * The bills the review shows: those with new things still to check, and always the latest one, so a bill
+     * that matched everything still shows what it added and its "not food" lines (with Add anyway).
+     */
+    fun shown(bills: List<Bill>): List<Bill> {
+        val latest = bills.maxByOrNull { it.at }
+        return bills.filter { it.toReview.isNotEmpty() || it === latest }.sortedByDescending { it.at }
     }
 
     /** All lines still to check, newest bill first. */
@@ -249,7 +264,7 @@ object BillImport {
             home.addFoodStock(food, qty)
             lines += Line(newId(), item.said, food.name, food.id, qty, food.unit, source, created = !existed, newStock = newStock, brand = food.brand)
         }
-        return Bill(System.currentTimeMillis(), lines, result.skipped)
+        return Bill(System.currentTimeMillis(), lines, result.skipped, printed = result.items.map { it.said } + result.skipped)
     }
 
     /** Keeps a bill (or Say it's lines) for review. */
@@ -294,7 +309,7 @@ object BillImport {
         if (line.newStock) home.stockFor(line.foodId)?.let { home.deleteStockItem(it) }
         else home.takeOut(line.foodId, line.qty, "not from the bill")
         if (line.created) {
-            val food = repo.library.first().foods[line.foodId] ?: return
+            val food = repo.foodNow(line.foodId) ?: return
             val used = repo.allEntries.first().any { !it.deleted && it.refId == food.id }
             if (!used) repo.deleteFood(food)
         }
@@ -342,7 +357,7 @@ object BillImport {
         val now = (result.items.map { it.said } + result.skipped).map(::key).filter { it.isNotEmpty() }
         if (now.size < 3) return null
         return earlier.firstOrNull { b ->
-            val before = (b.lines.map { it.said } + b.skipped).map(::key).toMutableList()
+            val before = b.printed.ifEmpty { b.lines.map { it.said } + b.skipped }.map(::key).toMutableList()
             val same = now.count { before.remove(it) }
             same >= 0.8 * now.size
         }
