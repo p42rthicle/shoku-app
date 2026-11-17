@@ -70,6 +70,8 @@ data class StockView(
     val units: Map<String, List<Pair<String, Double>>> = emptyMap(),
     /** Per food: "350 g in stock · Pantry", for its Edit food sheet. */
     val texts: Map<String, String> = emptyMap(),
+    /** Per stock food: its brand, shown as a chip on the row like in the food lists. */
+    val brands: Map<String, String> = emptyMap(),
 )
 
 /** The latest [StockView.texts], kept current by ShokuApp, so any Edit food sheet can show what's at home. */
@@ -166,7 +168,7 @@ fun LazyListScope.stockSection(
                     if (idx > 0) Hairline()
                     Row(Modifier.fillMaxWidth().clickable { onOpen(l.item) }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text(l.item.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            app.shoku.ui.components.NameWithTag(l.item.name, l.item.foodId?.let { view.brands[it] }, MaterialTheme.typography.titleMedium)
                             Text(levelText(l, friendly(view, l.item)), style = MaterialTheme.typography.bodySmall, color = ShokuColors.Muted)
                             bestBeforeText(l.item, today)?.let { (t, warn) -> Text(t, style = MaterialTheme.typography.bodySmall, color = if (warn) ShokuColors.Over else ShokuColors.Muted) }
                         }
@@ -246,7 +248,7 @@ fun LazyListScope.stockSection(
                     if (idx > 0) Hairline()
                     Row(Modifier.fillMaxWidth().clickable { onOpen(l.item) }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text(l.item.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            app.shoku.ui.components.NameWithTag(l.item.name, l.item.foodId?.let { view.brands[it] }, MaterialTheme.typography.titleMedium)
                             Text(levelText(l, friendly(view, l.item)), style = MaterialTheme.typography.bodySmall, color = ShokuColors.Muted)
                             bestBeforeText(l.item, today)?.let { (t, warn) -> Text(t, style = MaterialTheme.typography.bodySmall, color = if (warn) ShokuColors.Over else ShokuColors.Muted) }
                         }

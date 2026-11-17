@@ -195,6 +195,7 @@ class PlanViewModel(
         StockView(
             levels, all.filterNot(::hiddenRow), hiddenCount = all.count(::hiddenRow) + week.count(::hiddenWeek),
             week = week.filterNot(::hiddenWeek), weekFrom = nextMonday, units = units, texts = lib.stockTexts(levels),
+            brands = levels.mapNotNull { l -> l.item.foodId?.let { id -> lib.foods[id]?.brand?.trim()?.takeIf { it.isNotEmpty() }?.let { id to it } } }.toMap(),
         )
     }.flowOn(kotlinx.coroutines.Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), StockView())
 
