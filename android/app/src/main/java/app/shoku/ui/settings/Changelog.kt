@@ -25,6 +25,13 @@ data class Release(val version: String, val date: String, val changes: List<Stri
  */
 val CHANGELOG = listOf(
     Release(
+        "0.9.63", "17 Nov 2026",
+        listOf(
+            "Stock search (and At home in Search everything) finds a food by its Also known as names and plurals: \"Protein Wraps\" finds your High-protein wrap",
+            "Your foods in Search everything show what's at home first: \"1520 g in stock · Pantry · per 100 g · 318 kcal\"",
+        ),
+    ),
+    Release(
         "0.9.62", "17 Nov 2026",
         listOf(
             "Search everything finds what's at home by brand too (SDS), and \"pantry\", \"fridge\", \"freezer\" or \"spices\" lists what's there; \"stock\" lists everything",

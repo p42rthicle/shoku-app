@@ -60,6 +60,15 @@ class StockAndCopyTest {
         assertEquals(listOf("Skyr"), names("skyr"))               // name
         assertEquals(emptyList<String>(), names("omega"))         // supplements have their own section
         assertEquals("≈ 80 g left · about 2 pack", view.rowText(view.levels.first()))
+        // Plurals and "Also known as": "Protein Wraps" finds the High-protein wrap.
+        val wraps = StockView(
+            levels = listOf(at("w", "High-protein wrap", "f9", "Pantry", 1520.0), at("r", "Rice", "f2", "Pantry")),
+            brands = mapOf("f9" to "Goldähren"),
+            aliases = mapOf("f9" to "High-protein wrap Aldi Goldähren High Protein Wraps, Protein Wraps"),
+        )
+        assertEquals(listOf("High-protein wrap"), wraps.homeMatches("Protein Wraps").map { it.item.name })
+        assertEquals(listOf("High-protein wrap"), wraps.homeMatches("wraps").map { it.item.name })
+        assertEquals(listOf("High-protein wrap"), wraps.matching("protein wraps").levels.map { it.item.name }) // the Stock tab too
     }
 
     @Test fun copyOnlyTheTickedItems() = runBlocking {

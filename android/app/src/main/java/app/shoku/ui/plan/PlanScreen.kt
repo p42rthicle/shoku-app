@@ -196,6 +196,8 @@ class PlanViewModel(
             levels, all.filterNot(::hiddenRow), hiddenCount = all.count(::hiddenRow) + week.count(::hiddenWeek),
             week = week.filterNot(::hiddenWeek), weekFrom = nextMonday, units = units, texts = lib.stockTexts(levels),
             brands = levels.mapNotNull { l -> l.item.foodId?.let { id -> lib.foods[id]?.brand?.trim()?.takeIf { it.isNotEmpty() }?.let { id to it } } }.toMap(),
+            // Its food's name and "Also known as", so "Protein Wraps" finds the High-protein wrap.
+            aliases = levels.mapNotNull { l -> l.item.foodId?.let { id -> lib.foods[id]?.let { f -> id to "${f.name} ${f.aliases}".trim() } } }.toMap(),
         )
     }.flowOn(kotlinx.coroutines.Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), StockView())
 

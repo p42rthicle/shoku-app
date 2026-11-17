@@ -72,6 +72,8 @@ data class StockView(
     val texts: Map<String, String> = emptyMap(),
     /** Per stock food: its brand, shown as a chip on the row like in the food lists. */
     val brands: Map<String, String> = emptyMap(),
+    /** Per stock food: its name and "Also known as" names, for search. */
+    val aliases: Map<String, String> = emptyMap(),
 )
 
 /** The latest [StockView.texts], kept current by ShokuApp, so any Edit food sheet can show what's at home. */
@@ -83,16 +85,22 @@ object StockText { val map = kotlinx.coroutines.flow.MutableStateFlow<Map<String
  */
 fun StockView.matching(query: String): StockView {
     if (query.isBlank()) return this
+    val q = app.shoku.domain.searchKey(query).trim()
     fun hit(name: String) = app.shoku.domain.matchesAll(app.shoku.domain.searchKey(name), query)
-    val compact = app.shoku.domain.searchKey(query).filter { it.isLetterOrDigit() }
+    val compact = q.filter { it.isLetterOrDigit() }
     fun brandHit(foodId: String?): Boolean {
         val b = foodId?.let { brands[it] } ?: return false
         return hit(b) || (compact.length >= 3 && compact in app.shoku.domain.searchKey(b).filter { it.isLetterOrDigit() })
     }
+    // As the food search does: plurals count ("wraps" = "wrap"), and its "Also known as" names too.
+    fun scored(name: String, foodId: String?): Boolean = app.shoku.domain.matchScore(
+        q, app.shoku.domain.searchKey("$name ${foodId?.let { brands[it] }.orEmpty()}"), app.shoku.domain.searchKey(foodId?.let { aliases[it] }.orEmpty()),
+    ) > 0
+    fun found(name: String, foodId: String?) = hit(name) || brandHit(foodId) || scored(name, foodId)
     return copy(
-        levels = levels.filter { hit(it.item.name) || brandHit(it.item.foodId) },
-        shopping = shopping.filter { hit(it.name) || brandHit(it.foodId) },
-        week = week.filter { hit(it.name) || brandHit(it.foodId) },
+        levels = levels.filter { found(it.item.name, it.item.foodId) },
+        shopping = shopping.filter { found(it.name, it.foodId) },
+        week = week.filter { found(it.name, it.foodId) },
     )
 }
 

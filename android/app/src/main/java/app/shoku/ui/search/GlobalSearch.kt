@@ -172,7 +172,9 @@ fun GlobalSearchScreen(library: Library?, planVm: app.shoku.ui.plan.PlanViewMode
         add("Your foods" to library.foods.values.filter { !it.deleted && !FoodFamilies.isHiddenSizeRow(it) }
             .map { f -> f to matchScore(q, searchKey("${f.name} ${f.brand.orEmpty()}"), searchKey(f.aliases)) }
             .filter { it.second > 0 }.sortedByDescending { it.second }.take(30).map { (f, _) ->
-                Hit(f.name, if (f.kind == FoodKind.GENERIC) "Any brand" else f.brand, (if (f.archived) "Archived · " else "") + "per ${formatUnitQty(f.baseQty, f.unit)} · ${f.kcal?.let { Math.round(it) } ?: "?"} kcal") { actions.openFood(f.id) }
+                // At home, it says so first: "1520 g in stock · Pantry · per 100 g · 318 kcal".
+                val home = stock.texts[f.id]?.let { "$it · " }.orEmpty()
+                Hit(f.name, if (f.kind == FoodKind.GENERIC) "Any brand" else f.brand, (if (f.archived) "Archived · " else "") + home + "per ${formatUnitQty(f.baseQty, f.unit)} · ${f.kcal?.let { Math.round(it) } ?: "?"} kcal") { actions.openFood(f.id) }
             })
         add("Dishes and batches" to (
             library.dishes.values.filter { !it.deleted && hit(it.name) }.map { d -> Hit(d.name, null, if (d.archived) "Dish · archived" else "Dish") { actions.openDish(d.id) } } +
