@@ -96,6 +96,28 @@ fun StockView.matching(query: String): StockView {
     )
 }
 
+/**
+ * What's at home for global search: by name or brand; a place ("pantry", "fridge", "spices") lists what's
+ * there; "stock" or "home" lists everything. Supplements have their own section.
+ */
+fun StockView.homeMatches(query: String): List<StockLevel> {
+    val q = app.shoku.domain.searchKey(query).trim()
+    if (q.isEmpty()) return emptyList()
+    val food = levels.filter { it.item.supplementId == null }
+    val word = q.removeSuffix("s")
+    val place = app.shoku.data.db.StockPlaces.ALL.filter { it != app.shoku.data.db.StockPlaces.SUPPLEMENTS }
+        .firstOrNull { app.shoku.domain.searchKey(it).removeSuffix("s") == word }
+    val order = app.shoku.data.db.StockPlaces.ALL
+    return when {
+        q in setOf("stock", "home", "at home", "inventory", "vorrat") -> food
+        place != null -> food.filter { it.item.place == place }
+        else -> matching(query).levels.filter { it.item.supplementId == null }
+    }.sortedWith(compareBy<StockLevel>({ order.indexOf(it.item.place) }, { it.item.name.lowercase() }))
+}
+
+/** A stock row's text, as on the Stock tab: "≈ 60 g left · about 2 pack · running low". */
+fun StockView.rowText(l: StockLevel): String = levelText(l, friendly(this, l.item))
+
 /** A household unit to show next to grams ("about 6 pc"), if the food has one. */
 private fun friendly(view: StockView, i: StockItem): Pair<String, Double>? =
     i.foodId?.let { view.units[it] }?.drop(1)?.takeIf { i.unit in app.shoku.domain.WEIGHT_UNITS }

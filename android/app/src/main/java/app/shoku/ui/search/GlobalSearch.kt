@@ -69,6 +69,8 @@ import app.shoku.ui.components.SquareIconButton
 import app.shoku.ui.formatUnitQty
 import app.shoku.ui.shortLabel
 import app.shoku.ui.plan.stockLine
+import app.shoku.ui.plan.homeMatches
+import app.shoku.ui.plan.rowText
 import app.shoku.ui.theme.ShokuColors
 import app.shoku.ui.theme.ShokuShapes
 import app.shoku.ui.theme.ShokuSpacing
@@ -157,11 +159,9 @@ fun GlobalSearchScreen(library: Library?, planVm: app.shoku.ui.plan.PlanViewMode
     fun hit(name: String) = matchesAll(searchKey(name), query.trim())
     // Everything local is searched after a short pause in typing, off the main thread; online results join as they arrive.
     val local by rememberSearchResults(q, emptyList<Pair<String, List<Hit>>>(), library, entries, stock, plan, supps) { q -> if (q.isEmpty() || library == null) emptyList() else buildList {
-        add("At home" to stock.levels.filter { it.item.supplementId == null && hit(it.item.name) }.map { l ->
-            val i = l.item
-            val amount = if (!i.tracked) when (i.status) { "low" -> "Running low"; "out" -> "Out"; else -> "Have it" }
-                else l.qty?.let { "≈ ${formatUnitQty(Math.round(it * 10) / 10.0, i.unit)}" } ?: "Not counted"
-            Hit(i.name, null, "${i.place} · $amount") { actions.openStock(i.id) }
+        // By name or brand, or a whole place ("pantry", "spices") or all of it ("stock").
+        add("At home" to stock.homeMatches(query.trim()).map { l ->
+            Hit(l.item.name, l.item.foodId?.let { stock.brands[it] }, "${l.item.place} · ${stock.rowText(l)}") { actions.openStock(l.item.id) }
         })
         add("Logged" to entries.filter { !it.deleted && (hit(it.name) || it.note?.let(::hit) == true || it.variant?.let(::hit) == true) }
             .sortedWith(compareByDescending<app.shoku.data.db.LogEntry> { it.date }.thenByDescending { it.createdAt }).take(40).map { e ->
@@ -229,7 +229,7 @@ fun GlobalSearchScreen(library: Library?, planVm: app.shoku.ui.plan.PlanViewMode
             verticalArrangement = Arrangement.spacedBy(ShokuSpacing.Gap),
         ) {
             if (q.isEmpty()) {
-                item { Text("Type to search what's at home, what you've logged, your foods and dishes, your plan and supplements, the food databases and Open Food Facts.", style = MaterialTheme.typography.bodyMedium, color = ShokuColors.Muted) }
+                item { Text("Type to search what's at home, what you've logged, your foods and dishes, your plan and supplements, the food databases and Open Food Facts. \"Pantry\", \"fridge\" or \"spices\" lists what's there; \"stock\" lists everything at home.", style = MaterialTheme.typography.bodyMedium, color = ShokuColors.Muted) }
             } else {
                 item(key = "log") {
                     OutlinedCard(Modifier.fillMaxWidth(), onClick = { actions.log(query.trim()) }) {

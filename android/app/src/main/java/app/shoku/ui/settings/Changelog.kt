@@ -25,6 +25,13 @@ data class Release(val version: String, val date: String, val changes: List<Stri
  */
 val CHANGELOG = listOf(
     Release(
+        "0.9.62", "17 Nov 2026",
+        listOf(
+            "Search everything finds what's at home by brand too (SDS), and \"pantry\", \"fridge\", \"freezer\" or \"spices\" lists what's there; \"stock\" lists everything",
+            "Stock results show what's left as on the Stock tab: \"Spices · ≈ 60 g left · about 2 pack\"",
+        ),
+    ),
+    Release(
         "0.9.61", "17 Nov 2026",
         listOf(
             "Nothing a scan finds is thrown away: the pack size (from the barcode, the label or a pack photo) is saved as a \"pack\" unit, and the pack's serving as a unit, already filled in when you save the food",
