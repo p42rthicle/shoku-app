@@ -105,6 +105,8 @@ data class AiLabelResult(
     val carbs: Double? = null,
     val fat: Double? = null,
     @SerialName("serving_size") val servingSize: Double? = null,
+    /** Net weight of the whole pack (a 20 g masala sachet), if printed. */
+    @SerialName("pack_size") val packSize: Double? = null,
     val note: String? = null,
 )
 

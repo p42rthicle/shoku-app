@@ -131,7 +131,7 @@ const BILL_TASK = 'Task: this is a supermarket receipt (one or more images; a lo
 const LABEL_RESULT = {
 	type: 'object',
 	additionalProperties: false,
-	required: ['readable', 'name', 'brand', 'unit', 'kcal', 'protein', 'fibre', 'carbs', 'fat', 'serving_size', 'note'],
+	required: ['readable', 'name', 'brand', 'unit', 'kcal', 'protein', 'fibre', 'carbs', 'fat', 'serving_size', 'pack_size', 'note'],
 	properties: {
 		readable: { type: 'boolean', description: 'False if no nutrition table can be read' },
 		name: nullable({ type: 'string' }),
@@ -139,6 +139,7 @@ const LABEL_RESULT = {
 		unit: { type: 'string', enum: ['g', 'ml'], description: 'Basis of the per-100 column' },
 		kcal: nullable(num), protein: nullable(num), fibre: nullable(num), carbs: nullable(num), fat: nullable(num),
 		serving_size: nullable({ type: 'number', description: 'Grams or ml in one serving, if printed' }),
+		pack_size: nullable({ type: 'number', description: 'Net weight or volume of the whole pack in the same unit, if printed (20 for a 20 g sachet)' }),
 		note: nullable({ type: 'string', description: 'Anything uncertain, briefly' }),
 	},
 };
@@ -265,7 +266,7 @@ async function parseMeal(apiKey, body) {
 
 async function readLabel(apiKey, body) {
 	return ask(apiKey, {
-		task: 'Task: read the nutrition table on this food package. Use the per 100 g / 100 ml column (not per serving). Energy in kcal (convert from kJ only if kcal is missing). Name and brand from the package if visible. German labels: Brennwert = energy, Eiweiß = protein, Ballaststoffe = fibre, Kohlenhydrate = carbs, Fett = fat. If the table is not readable, set readable false.',
+		task: 'Task: read the nutrition table on this food package. Use the per 100 g / 100 ml column (not per serving). Energy in kcal (convert from kJ only if kcal is missing). Name and brand from the package if visible. German labels: Brennwert = energy, Eiweiß = protein, Ballaststoffe = fibre, Kohlenhydrate = carbs, Fett = fat. pack_size: the net weight or volume of the whole pack if printed anywhere in the photo (Net wt. 50 g), else null. If the table is not readable, set readable false.',
 		content: [image(body), { type: 'text', text: 'Read this label.' }],
 		schema: LABEL_RESULT,
 		maxTokens: 2000,

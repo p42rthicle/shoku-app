@@ -116,6 +116,7 @@ val LABEL_RESULT = obj(
     "unit" to typed("string", "Basis of the per-100 column", listOf("g", "ml")),
     "kcal" to nullable(num), "protein" to nullable(num), "fibre" to nullable(num), "carbs" to nullable(num), "fat" to nullable(num),
     "serving_size" to nullable(typed("number", "Grams or ml in one serving, if printed")),
+    "pack_size" to nullable(typed("number", "Net weight or volume of the whole pack in the same unit, if printed (20 for a 20 g sachet)")),
     "note" to nullable(typed("string", "Anything uncertain, briefly")),
 )
 
@@ -180,7 +181,7 @@ Matching to their library:
 
 const val MEAL_TASK_TEXT = "Task: turn their description of what they ate into items. If the description says which meal it was, set meal; otherwise null."
 
-const val LABEL_TASK = "Task: read the nutrition table on this food package. Use the per 100 g / 100 ml column (not per serving). Energy in kcal (convert from kJ only if kcal is missing). Name and brand from the package if visible. German labels: Brennwert = energy, Eiweiß = protein, Ballaststoffe = fibre, Kohlenhydrate = carbs, Fett = fat. If the table is not readable, set readable false."
+const val LABEL_TASK = "Task: read the nutrition table on this food package. Use the per 100 g / 100 ml column (not per serving). Energy in kcal (convert from kJ only if kcal is missing). Name and brand from the package if visible. German labels: Brennwert = energy, Eiweiß = protein, Ballaststoffe = fibre, Kohlenhydrate = carbs, Fett = fat. pack_size: the net weight or volume of the whole pack if printed anywhere in the photo (Net wt. 50 g), else null. If the table is not readable, set readable false."
 const val PRODUCT_TASK = "Task: identify the packaged product in the photos (one to four photos of the same pack). They may show the front, back or side of the pack, often with no nutrition table (a supplement tub, a spice packet). Take the name and brand from the front of the pack when a photo shows it, and the values from the nutrition table when one shows. Name: the product as sold, short, without the brand (e.g. Creatine monohydrate). Brand: as printed on the pack. If a nutrition table is visible in any photo, read the per 100 g / 100 ml column and set from_label true. Otherwise give typical per-100 values for this kind of product from what you know and set from_label false (pure creatine, caffeine or electrolyte powders are about 0 kcal). serving_size: grams or ml in one serving or scoop if the pack says, else null. note: one short line saying what you read from the pack and what is typical. If you cannot tell what the product is, set identified false."
 
 const val HINTS_INTRO = "This person's past corrections and usual portions. When the food or photo matches, follow them over your own guess:"

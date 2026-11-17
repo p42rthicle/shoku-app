@@ -376,7 +376,7 @@ class AddViewModel(
             RefType.FOOD, id, food.name, "${if (app.shoku.data.reference.OfflineProducts.lookup(p.barcode) != null) "Built in" else "Online"} · per 100 ${p.unit} · ${p.kcal?.let { Math.round(it) } ?: "?"} kcal",
             p.unit, 100.0, food.perUnit() * 100.0, tag = p.brand, directFood = food, directPortions = portions,
         )
-        val typed = amountFor(base.units(null), parsed) ?: (portions.firstOrNull()?.let { it.label to 1.0 })
+        val typed = amountFor(base.units(null), parsed) ?: (portions.firstOrNull { it.label != "pack" }?.let { it.label to 1.0 })
         return typed?.let { (u, q) -> base.copy(unit = u, qty = q, nutrients = base.nutrients(null, u, q)) } ?: base
     }
 

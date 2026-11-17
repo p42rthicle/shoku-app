@@ -149,9 +149,9 @@ fun NewFoodEditor(
             onReadLabel?.let { f -> (if (draft.found) "Add values from the label" else "Read the label with a photo") to { f(barcode) } },
             onPackPhoto?.let { f -> (if (draft.found) "Or a photo of the pack" else "No label? Take a photo of the pack") to { f(barcode) } },
         ),
-        // FoodEditor hands over the units first, then the food. The pack's serving is only suggested.
-        portions = emptyList(),
-        suggested = draft.portions,
+        // FoodEditor hands over the units first, then the food. What the scan found (serving, pack) is
+        // filled in, so it's kept unless removed.
+        portions = draft.portions,
         onSavePortions = { pending.value = it },
         onSave = { food, _ -> onSave(food, pending.value) },
         onArchive = null,

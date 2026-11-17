@@ -167,6 +167,6 @@ fun ScannedProduct.toLibraryFood(): Pair<app.shoku.data.db.Food, List<app.shoku.
         kcal = kcal?.let { Math.round(it * 10) / 10.0 }, protein = protein, fibre = fibre, carbs = carbs, fat = fat,
         barcode = barcode, brand = brand, source = "openfoodfacts",
     )
-    // Serving and pack sizes are offered as suggestions in the food editor, never added on their own.
-    return food to emptyList()
+    // Its serving and its pack come along as units (kept, never thrown away).
+    return food to (app.shoku.data.FoodLookup.servingPortion(food, servingQty) + app.shoku.data.FoodLookup.packPortion(food, packQty, servingQty))
 }

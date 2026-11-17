@@ -87,7 +87,7 @@ object DraftMerge {
             kcal = v("kcal", a.kcal, b.kcal), protein = v("protein", a.protein, b.protein), fibre = v("fibre", a.fibre, b.fibre),
             carbs = v("carbs", a.carbs, b.carbs), fat = v("fat", a.fat, b.fat),
             barcode = a.barcode ?: b.barcode,
-        ))
+        ).let { f -> f.copy(aliases = FoodLookup.withAlias(FoodLookup.withAlias(f.aliases, a.name, f.name), b.name, f.name)) })
     }
 
     private fun num(f: Food, field: String): Double? = when (field) {
@@ -146,8 +146,7 @@ object FoodLookup {
         // that counts as not found, so the label photo comes next instead of a food with empty values.
         val hasNutrition = product?.kcal != null
         product?.packQty?.takeIf { it > 0 }?.let { PackSizes.remember(prefill.id, it) }
-        val pack = product?.packQty?.takeIf { it <= 400 && it != product.servingQty }
-            ?.let { listOf(FoodPortion(java.util.UUID.nameUUIDFromBytes("portion|${prefill.id}|pack".toByteArray()).toString(), prefill.id, "pack", it)) }.orEmpty()
+        val pack = packPortion(prefill, product?.packQty, product?.servingQty)
         return BarcodeResult.New(
             FoodDraft(
                 prefill, families, found = hasNutrition,
@@ -170,7 +169,7 @@ object FoodLookup {
             barcode = barcode, brand = r.brand, source = "label",
         )
         return FoodDraft(prefill, library.suggestFamilies("${r.name.orEmpty()} ${r.brand.orEmpty()}"), found = true, fromLabel = true, note = r.note,
-            portions = servingPortion(prefill, r.servingSize))
+            portions = servingPortion(prefill, r.servingSize) + packPortion(prefill, r.packSize, r.servingSize), packQty = r.packSize?.takeIf { it > 0 })
     }
 
     /**
@@ -189,7 +188,7 @@ object FoodLookup {
             barcode = barcode, brand = r.brand?.trim()?.takeIf { it.isNotEmpty() }, source = if (r.fromLabel) "label" else "pack",
         )
         return FoodDraft(prefill, library.suggestFamilies("$name ${r.brand.orEmpty()}"), found = true, fromLabel = r.fromLabel, fromPack = true, note = r.note,
-            portions = servingPortion(prefill, r.servingSize), packQty = r.packSize?.takeIf { it > 0 })
+            portions = servingPortion(prefill, r.servingSize) + packPortion(prefill, r.packSize, r.servingSize), packQty = r.packSize?.takeIf { it > 0 })
     }
 
     /** The label photo, and when it shows no nutrition table, what the product is from the same photo. */
@@ -210,15 +209,25 @@ object FoodLookup {
     suspend fun useExisting(repo: ShokuRepository, existing: Food, draft: FoodDraft): Food {
         val p = draft.prefill
         val sameBasis = p.unit == existing.unit && p.baseQty == existing.baseQty
+        // The name on the pack stays findable: "Nutella" on your "Hazelnut chocolate spread".
+        val aliases = withAlias(existing.aliases, p.name, existing.name)
         val updated = existing.copy(
             barcode = existing.barcode?.takeIf { it.isNotBlank() } ?: p.barcode,
             brand = existing.brand?.takeIf { it.isNotBlank() } ?: p.brand,
             kcal = existing.kcal ?: p.kcal?.takeIf { sameBasis }, protein = existing.protein ?: p.protein?.takeIf { sameBasis },
             fibre = existing.fibre ?: p.fibre?.takeIf { sameBasis }, carbs = existing.carbs ?: p.carbs?.takeIf { sameBasis }, fat = existing.fat ?: p.fat?.takeIf { sameBasis },
-            archived = false,
+            archived = false, aliases = aliases,
         )
         if (updated != existing) repo.saveFood(updated, updatePast = false)
         draft.packQty?.let { PackSizes.remember(updated.id, it) }
+        // The scan's units (its pack, its serving) join the ones the food has, none replaced.
+        if (p.unit == existing.unit) {
+            val have = repo.library.first().portionsOf(existing).map { it.label }.toSet()
+            val add = (draft.portions + packPortion(existing, draft.packQty))
+                .filter { it.label !in have }.distinctBy { it.label }
+                .map { it.copy(id = java.util.UUID.nameUUIDFromBytes("portion|${existing.id}|${it.label}".toByteArray()).toString(), foodId = existing.id) }
+            if (add.isNotEmpty()) repo.savePortions(add)
+        }
         return updated
     }
 
@@ -233,6 +242,22 @@ object FoodLookup {
      * The pack's serving as a unit, named after what it usually is: a slice of bread, a piece of biscuit,
      * a bar, otherwise "serving". Editable before saving.
      */
+    /**
+     * The whole pack as a unit ("pack" = 20 g of masala, 500 g of muesli), kept whenever a scan, label or
+     * bill knows it, so stock can be counted in packs. Not when it's the same as one serving.
+     */
+    fun packPortion(food: Food, qty: Double?, serving: Double? = null): List<FoodPortion> =
+        if (qty == null || qty <= 0 || qty == serving) emptyList()
+        else listOf(FoodPortion(java.util.UUID.nameUUIDFromBytes("portion|${food.id}|pack".toByteArray()).toString(), food.id, "pack", qty))
+
+    /** [aliases] with [name] added, unless it's the food's own [ownName] or already there ("a, b"). */
+    fun withAlias(aliases: String, name: String?, ownName: String): String {
+        val n = name?.trim().orEmpty()
+        val list = aliases.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+        if (n.isEmpty() || searchKey(n) == searchKey(ownName) || list.any { searchKey(it) == searchKey(n) }) return aliases
+        return (list + n).joinToString(", ")
+    }
+
     fun servingPortion(food: Food, qty: Double?): List<FoodPortion> {
         if (qty == null || qty <= 0 || food.unit !in app.shoku.domain.WEIGHT_UNITS) return emptyList()
         val n = searchKey("${food.name} ${food.brand.orEmpty()}")
@@ -243,7 +268,7 @@ object FoodLookup {
             listOf("creatine", "kreatin", "whey", "protein powder", "pulver", "powder", "electrolyte").any { it in n } -> "scoop"
             else -> "serving"
         }
-        return listOf(FoodPortion(java.util.UUID.randomUUID().toString(), food.id, label, qty))
+        return listOf(FoodPortion(java.util.UUID.nameUUIDFromBytes("portion|${food.id}|$label".toByteArray()).toString(), food.id, label, qty))
     }
 }
 

@@ -25,6 +25,16 @@ data class Release(val version: String, val date: String, val changes: List<Stri
  */
 val CHANGELOG = listOf(
     Release(
+        "0.9.61", "17 Nov 2026",
+        listOf(
+            "Nothing a scan finds is thrown away: the pack size (from the barcode, the label or a pack photo) is saved as a \"pack\" unit, and the pack's serving as a unit, already filled in when you save the food",
+            "Adding a packed food to stock starts at 1 pack, so 2 sachets of 30 g is just \"2 pack\"",
+            "Use this (an existing food) keeps the scan's pack, serving and name (as Also known as)",
+            "Barcode and label disagree on the name: the one you don't pick is kept as Also known as",
+            "Add anyway on a bill: cancelling goes back to the review and keeps the line; adding it goes back too",
+        ),
+    ),
+    Release(
         "0.9.60", "17 Nov 2026",
         listOf(
             "Bill review always shows your latest bill too, so a bill where everything matched still shows what it added and its \"not food\" lines (Add anyway)",

@@ -231,7 +231,7 @@ private fun LibraryList(
                         }
                         LibTab.Dishes -> SquareIconButton(Icons.Rounded.Add, "New dish", onClick = { creatingDish = true })
                         LibTab.Batches -> SquareIconButton(Icons.Rounded.Add, "Cook a batch", onClick = { vm.pickingCook = true })
-                        LibTab.Stock -> SquareIconButton(Icons.Rounded.Add, "Add to stock", onClick = { stockUi.searching = true })
+                        LibTab.Stock -> SquareIconButton(Icons.Rounded.Add, "Add to stock", onClick = { stockUi.addingAnyway = null; stockUi.searching = true })
                     }
                 },
             )
@@ -314,7 +314,7 @@ private fun LibraryList(
             LibTab.Stock -> {
                 stockSection(
                     stock, stockBusy,
-                    onScan = stockScan, onSearch = { stockUi.searching = true }, onSay = { stockUi.saying = true },
+                    onScan = { stockUi.addingAnyway = null; stockScan() }, onSearch = { stockUi.addingAnyway = null; stockUi.searching = true }, onSay = { stockUi.saying = true },
                     onBill = { choosingBill = true },
                     billCard = run {
                         val toCheck = bills.sumOf { it.toReview.size }
@@ -446,7 +446,7 @@ private fun LibraryList(
             onReplace = { l -> reviewingBill = false; planVm.replacingBill = l; stockUi.searching = true },
             onRemove = { lines -> reviewScope.launch { lines.forEach { app.shoku.data.BillImport.remove(shoku, it) } } },
             // Not food by the AI's reading, but it is: find it (or make it New), starting from the line.
-            onAddAnyway = { text -> reviewingBill = false; app.shoku.data.BillImport.dropSkipped(text); stockUi.searchText = text; stockUi.searching = true },
+            onAddAnyway = { text -> reviewingBill = false; stockUi.searchText = text; stockUi.addingAnyway = text; stockUi.searching = true },
             onDismiss = { reviewingBill = false },
         )
     }

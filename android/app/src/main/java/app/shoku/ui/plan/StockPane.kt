@@ -28,6 +28,8 @@ class StockUi {
     var searchText by mutableStateOf("")
     /** The bill line whose stock card is open (from the review): saving checks it and returns to the review. */
     var billLine by mutableStateOf<app.shoku.data.BillImport.Line?>(null)
+    /** The bill's "not food" line being added anyway: adding takes it off that list; adding or cancelling goes back to the review. */
+    var addingAnyway by mutableStateOf<String?>(null)
 }
 
 /** Words that mark a supplement rather than a food, so "add to stock" starts on Supplement. */
@@ -82,7 +84,10 @@ fun StockSheets(vm: PlanViewModel, ui: StockUi, onStockAdded: ((String) -> Unit)
             if (replacing != null) "Replace ${replacing.name}" else "Add to stock",
             replacing?.let { "On the bill: ${it.said}" }, lib, reference,
             onPick = { ui.searching = false; ui.searchText = ""; vm.pickForStock(it) },
-            onDismiss = { ui.searching = false; ui.searchText = ""; if (vm.replacingBill != null) { vm.replacingBill = null; app.shoku.data.BillImport.openReview.value = true } },
+            onDismiss = {
+                ui.searching = false; ui.searchText = ""
+                if (vm.replacingBill != null || ui.addingAnyway != null) { vm.replacingBill = null; ui.addingAnyway = null; app.shoku.data.BillImport.openReview.value = true }
+            },
             foodsOnly = true, initialQuery = ui.searchText,
         )
     }
@@ -111,6 +116,8 @@ fun StockSheets(vm: PlanViewModel, ui: StockUi, onStockAdded: ((String) -> Unit)
                 )
                 return@let
             }
+            // Packed things are counted in packs: 2 sachets of 30 g start as "1 pack", not 30 g.
+            val (startUnit, startQty) = packStart(lib, food, qty)
             app.shoku.ui.components.QuantitySheet(
                 header = {
                     KindSwitch(false) { asSupplement = it }
@@ -126,7 +133,7 @@ fun StockSheets(vm: PlanViewModel, ui: StockUi, onStockAdded: ((String) -> Unit)
                     }
                 },
                 title = food.name, subtitle = listOfNotNull(food.brand, "add to stock").joinToString(" · "),
-                units = lib.unitsFor(app.shoku.data.db.RefType.FOOD, food.id), initialUnit = food.unit, initialQty = qty,
+                units = lib.unitsFor(app.shoku.data.db.RefType.FOOD, food.id), initialUnit = startUnit, initialQty = startQty,
                 initialStatus = app.shoku.data.db.EntryStatus.EATEN,
                 nutrientsFor = { u, q -> lib.entryNutrients(app.shoku.data.db.RefType.FOOD, food.id, u, q) },
                 confirmLabel = "Add to stock", showStatus = false,
@@ -138,13 +145,14 @@ fun StockSheets(vm: PlanViewModel, ui: StockUi, onStockAdded: ((String) -> Unit)
                         shoku.appScope.launch { app.shoku.data.BillImport.replaced(shoku, line, food, lib.inFoodUnit(food.id, r.unit, r.qty) ?: r.qty) }
                         app.shoku.data.BillImport.openReview.value = true // back to the review
                     }
+                    ui.addingAnyway?.let { text -> app.shoku.data.BillImport.dropSkipped(text); ui.addingAnyway = null; app.shoku.data.BillImport.openReview.value = true }
                     val msg = "Added ${app.shoku.ui.formatUnitQty(r.qty, r.unit)} ${food.name} to stock"
                     if (onStockAdded != null) onStockAdded(msg)
                     else android.widget.Toast.makeText(context.applicationContext, msg, android.widget.Toast.LENGTH_SHORT).show()
                 },
                 onDismiss = {
                     vm.amountFor.value = null
-                    if (vm.replacingBill != null) { vm.replacingBill = null; app.shoku.data.BillImport.openReview.value = true }
+                    if (vm.replacingBill != null || ui.addingAnyway != null) { vm.replacingBill = null; ui.addingAnyway = null; app.shoku.data.BillImport.openReview.value = true }
                 },
             )
         }
@@ -191,4 +199,11 @@ fun StockSheets(vm: PlanViewModel, ui: StockUi, onStockAdded: ((String) -> Unit)
             onDismiss = { ui.moving = null },
         )
     }
+}
+
+/** Where the add-to-stock amount starts: whole packs when the food has a pack unit, else [qty] in its own unit. */
+internal fun packStart(lib: app.shoku.domain.Library, food: app.shoku.data.db.Food, qty: Double): Pair<String, Double> {
+    val pack = lib.portionsOf(food).firstOrNull { it.label == "pack" }?.qty?.takeIf { it > 0 } ?: return food.unit to qty
+    val n = qty / pack
+    return if (qty > 0 && Math.abs(n - Math.round(n)) < 1e-6 && Math.round(n) >= 1) "pack" to Math.round(n).toDouble() else food.unit to qty
 }
