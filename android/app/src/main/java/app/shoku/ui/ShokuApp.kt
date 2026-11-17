@@ -116,6 +116,8 @@ fun ShokuApp() {
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     // Add to stock from Today's + (Add › "Add to stock instead"): the stock sheets, shown over Today.
     val homeStockUi = remember { app.shoku.ui.plan.StockUi() }
+    // What's at home of each food, for Edit food ("350 g in stock · Pantry").
+    androidx.compose.runtime.LaunchedEffect(Unit) { planVm.stockView.collect { app.shoku.ui.plan.StockText.map.value = it.texts } }
     /** The Add that "Add to stock instead" came from, to return to; and the message to show there. */
     var stockReturn by remember { mutableStateOf<AddTarget?>(null) }
     var stockAdded by remember { mutableStateOf<String?>(null) }

@@ -1,6 +1,7 @@
 package app.shoku.ui.plan
 
 import app.shoku.domain.hideKey
+import app.shoku.domain.stockTexts
 import app.shoku.domain.stockChangedAt
 import app.shoku.domain.familyKey
 import androidx.compose.foundation.layout.imePadding
@@ -193,7 +194,7 @@ class PlanViewModel(
         fun hiddenWeek(w: app.shoku.domain.WeekItem) = app.shoku.domain.stillHidden(hidden[w.hideKey(nextMonday)], changed["food:${lib.familyKey(w.foodId)}"])
         StockView(
             levels, all.filterNot(::hiddenRow), hiddenCount = all.count(::hiddenRow) + week.count(::hiddenWeek),
-            week = week.filterNot(::hiddenWeek), weekFrom = nextMonday, units = units,
+            week = week.filterNot(::hiddenWeek), weekFrom = nextMonday, units = units, texts = lib.stockTexts(levels),
         )
     }.flowOn(kotlinx.coroutines.Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), StockView())
 

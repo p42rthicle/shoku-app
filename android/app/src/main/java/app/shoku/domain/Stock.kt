@@ -148,6 +148,31 @@ fun Library.shoppingList(levels: List<StockLevel>, plan: PlanState, horizonDays:
     return out.distinctBy { it.name }
 }
 
+/**
+ * What's at home of each food, for its Edit food sheet: "350 g in stock · Pantry", "in stock · Spices",
+ * "used up". A generic ("any brand") shows its family's stock.
+ */
+fun Library.stockTexts(levels: List<StockLevel>): Map<String, String> {
+    val food = levels.filter { it.item.supplementId == null && it.item.foodId != null }
+    fun text(ls: List<StockLevel>): String? {
+        val places = ls.map { it.item.place }.distinct().joinToString(", ")
+        val tracked = ls.filter { it.item.tracked && it.qty != null }
+        if (tracked.isNotEmpty()) {
+            val amounts = tracked.groupBy { it.item.unit }.mapNotNull { (u, l) ->
+                val q = l.sumOf { it.qty!!.coerceAtLeast(0.0) }
+                if (q <= 0.0) null else app.shoku.ui.formatUnitQty(if (q >= 10) Math.round(q).toDouble() else Math.round(q * 10) / 10.0, u)
+            }
+            return if (amounts.isEmpty()) "Used up · $places" else "${amounts.joinToString(" + ")} in stock · $places"
+        }
+        val st = ls.map { it.item.status }
+        return when { "have" in st -> "In stock · $places"; "low" in st -> "Running low · $places"; "out" in st -> "Out · $places"; else -> null }
+    }
+    val out = HashMap<String, String>()
+    food.groupBy { it.item.foodId!! }.forEach { (id, ls) -> text(ls)?.let { out[id] = it } }
+    food.groupBy { familyKey(it.item.foodId!!) }.forEach { (fam, ls) -> if (fam !in out && foods[fam]?.kind == app.shoku.data.db.FoodKind.GENERIC) text(ls)?.let { out[fam] = it } }
+    return out
+}
+
 /** The weekly list row's key for hiding it: that food, that week. */
 fun WeekItem.hideKey(from: LocalDate) = "week|$foodId|$from"
 

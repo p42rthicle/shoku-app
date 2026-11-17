@@ -13,6 +13,7 @@ import app.shoku.domain.shoppingList
 import app.shoku.domain.stillHidden
 import app.shoku.domain.stockChangedAt
 import app.shoku.domain.stockLevels
+import app.shoku.domain.stockTexts
 import app.shoku.domain.weekShopping
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -69,5 +70,14 @@ class StockListsTest {
         // Nothing in stock for it at all: stays hidden.
         assertTrue(stillHidden(hiddenAt, null))
         assertFalse(stillHidden(null, null))
+    }
+
+    @Test fun editFoodShowsWhatsAtHome() {
+        val texts = lib.stockTexts(levels(listOf(
+            StockItem("s", "Sunflower seeds", foodId = "seeds", unit = "g", countQty = 350.0, countedAt = 1),
+            StockItem("w", "High-protein wrap", foodId = "wrap", unit = "pc", countQty = 0.0, countedAt = 1, place = "Fridge"),
+        )))
+        assertEquals("350 g in stock · Pantry", texts["seeds"])
+        assertEquals("Used up · Fridge", texts["wrap"])
     }
 }

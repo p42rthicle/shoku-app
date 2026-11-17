@@ -68,7 +68,12 @@ data class StockView(
     val weekFrom: java.time.LocalDate? = null,
     /** Per stock food: the units it can be counted in, each with its size in the food's own unit (own unit first). */
     val units: Map<String, List<Pair<String, Double>>> = emptyMap(),
+    /** Per food: "350 g in stock · Pantry", for its Edit food sheet. */
+    val texts: Map<String, String> = emptyMap(),
 )
+
+/** The latest [StockView.texts], kept current by ShokuApp, so any Edit food sheet can show what's at home. */
+object StockText { val map = kotlinx.coroutines.flow.MutableStateFlow<Map<String, String>>(emptyMap()) }
 
 /** A household unit to show next to grams ("about 6 pc"), if the food has one. */
 private fun friendly(view: StockView, i: StockItem): Pair<String, Double>? =

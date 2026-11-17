@@ -25,6 +25,10 @@ data class Release(val version: String, val date: String, val changes: List<Stri
  */
 val CHANGELOG = listOf(
     Release(
+        "0.9.47", "17 Nov 2026",
+        listOf("Opening a food shows what's at home under its title: \"350 g in stock · Pantry\""),
+    ),
+    Release(
         "0.9.46", "16 Nov 2026",
         listOf(
             "For next week rows can be swiped away too, like To buy",

@@ -21,6 +21,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -139,6 +140,10 @@ fun FoodEditor(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text(title ?: if (food == null) "New food" else "Edit food", style = MaterialTheme.typography.headlineSmall)
+            if (food != null) {
+                val stockTexts by app.shoku.ui.plan.StockText.map.collectAsState()
+                stockTexts[food.id]?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = ShokuColors.Muted) }
+            }
             if (note != null) Text(note, style = MaterialTheme.typography.bodySmall, color = ShokuColors.Muted)
             header?.invoke()
             extraActions.forEach { extraAction ->
